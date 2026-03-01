@@ -1,18 +1,27 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using BTCPayServer.Abstractions.Constants;
 using BTCPayServer.Abstractions.Extensions;
 using BTCPayServer.Client;
+using BTCPayServer.Controllers;
+using BTCPayServer.Data;
 using BTCPayServer.Plugins.Emails.Services;
 using BTCPayServer.Plugins.SatoshiTickets.Data;
 using BTCPayServer.Plugins.SatoshiTickets.Models.Api;
 using BTCPayServer.Plugins.SatoshiTickets.Services;
+using BTCPayServer.Services.Invoices;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using NBitcoin;
+using NBitcoin.DataEncoders;
+using Newtonsoft.Json.Linq;
 
 namespace BTCPayServer.Plugins.SatoshiTickets.Controllers;
 
@@ -26,17 +35,26 @@ public class GreenfieldSatoshiTicketsController : ControllerBase
     private readonly EmailService _emailService;
     private readonly EmailSenderFactory _emailSenderFactory;
     private readonly SimpleTicketSalesDbContextFactory _dbContextFactory;
+    private readonly InvoiceRepository _invoiceRepository;
+    private readonly UIInvoiceController _invoiceController;
+    private readonly LinkGenerator _linkGenerator;
 
     public GreenfieldSatoshiTicketsController(
         TicketService ticketService,
         EmailService emailService,
         EmailSenderFactory emailSenderFactory,
-        SimpleTicketSalesDbContextFactory dbContextFactory)
+        SimpleTicketSalesDbContextFactory dbContextFactory,
+        InvoiceRepository invoiceRepository,
+        UIInvoiceController invoiceController,
+        LinkGenerator linkGenerator)
     {
         _ticketService = ticketService;
         _emailService = emailService;
         _emailSenderFactory = emailSenderFactory;
         _dbContextFactory = dbContextFactory;
+        _invoiceRepository = invoiceRepository;
+        _invoiceController = invoiceController;
+        _linkGenerator = linkGenerator;
     }
 
     private string CurrentStoreId => HttpContext.GetStoreData()?.Id;
@@ -161,6 +179,182 @@ public class GreenfieldSatoshiTicketsController : ControllerBase
         var orders = query.ToList();
         var result = orders.Select(ToOrderData).ToArray();
         return Ok(result);
+    }
+
+    [HttpPost("purchase")]
+    public async Task<IActionResult> CreatePurchase(string storeId, string eventId, [FromBody] CreatePurchaseRequest request)
+    {
+        if (request?.Tickets == null || request.Tickets.Length == 0)
+            return this.CreateAPIError(422, "validation-error", "At least one ticket item is required");
+
+        var store = HttpContext.GetStoreData();
+        if (store == null || store.Id != storeId)
+            return this.CreateAPIError(404, "store-not-found", "The store was not found");
+
+        await using var ctx = _dbContextFactory.CreateContext();
+        var ticketEvent = ctx.Events.FirstOrDefault(c => c.Id == eventId && c.StoreId == CurrentStoreId);
+        if (ticketEvent == null)
+            return EventNotFound();
+
+        var now = DateTime.UtcNow;
+        if (ticketEvent.EventState == EntityState.Disabled)
+            return this.CreateAPIError(422, "event-not-active", "The event is not active");
+        if (ticketEvent.StartDate.Date < now.Date)
+            return this.CreateAPIError(422, "event-expired", "The event has already started or ended");
+        if (ticketEvent.EndDate.HasValue && ticketEvent.EndDate.Value.Date < now.Date)
+            return this.CreateAPIError(422, "event-expired", "The event has ended");
+
+        if (ticketEvent.HasMaximumCapacity && ticketEvent.MaximumEventCapacity.HasValue)
+        {
+            var totalTicketsSold = ctx.Orders.AsNoTracking()
+                .Where(c => c.StoreId == storeId && c.EventId == eventId && c.PaymentStatus == TransactionStatus.Settled.ToString())
+                .SelectMany(c => c.Tickets).Count();
+            if (totalTicketsSold >= ticketEvent.MaximumEventCapacity.Value)
+                return this.CreateAPIError(422, "event-capacity-reached", "The event has reached maximum capacity");
+        }
+
+        var ticketTypes = ctx.TicketTypes.Where(t => t.EventId == eventId).ToDictionary(t => t.Id);
+
+        foreach (var item in request.Tickets)
+        {
+            if (item.Recipients == null || item.Recipients.Length != item.Quantity)
+                return this.CreateAPIError(422, "recipients-count-mismatch",
+                    $"Recipients count must equal quantity ({item.Quantity}) for ticket type {item.TicketTypeId}");
+
+            if (!ticketTypes.TryGetValue(item.TicketTypeId, out var ticketType))
+                return this.CreateAPIError(404, "ticket-type-not-found",
+                    $"Ticket type {item.TicketTypeId} was not found");
+
+            if (ticketType.TicketTypeState == EntityState.Disabled)
+                return this.CreateAPIError(422, "ticket-type-not-active",
+                    $"Ticket type {ticketType.Name} is not active");
+
+            var available = ticketType.Quantity - ticketType.QuantitySold;
+            if (ticketType.Quantity > 0 && available < item.Quantity)
+                return this.CreateAPIError(422, "insufficient-quantity",
+                    $"Insufficient quantity for ticket type {ticketType.Name}. Available: {available}, requested: {item.Quantity}");
+
+            foreach (var recipient in item.Recipients)
+            {
+                if (string.IsNullOrWhiteSpace(recipient?.Email))
+                    return this.CreateAPIError(422, "invalid-email", "Email is required for each recipient");
+            }
+        }
+
+        var txnId = Encoders.Base58.EncodeData(RandomUtils.GetBytes(10));
+        var orderNow = DateTimeOffset.UtcNow;
+        var order = new Order
+        {
+            TxnId = txnId,
+            EventId = eventId,
+            StoreId = storeId,
+            Currency = ticketEvent.Currency,
+            PaymentStatus = TransactionStatus.New.ToString(),
+            CreatedAt = orderNow,
+            TotalAmount = 0
+        };
+        ctx.Orders.Add(order);
+        await ctx.SaveChangesAsync();
+
+        var tickets = new List<Ticket>();
+        foreach (var item in request.Tickets)
+        {
+            var ticketType = ticketTypes[item.TicketTypeId];
+            for (var i = 0; i < item.Quantity; i++)
+            {
+                var recipient = item.Recipients[i];
+                var ticketTxn = Encoders.Base58.EncodeData(RandomUtils.GetBytes(10));
+                var qrCodeLink = Url.Action("EventTicketDisplay", "UITicketSalesPublic",
+                    new { storeId, eventId, orderId = order.Id, txnNumber = ticketTxn },
+                    Request.Scheme, Request.Host.Value);
+                var ticket = new Ticket
+                {
+                    StoreId = storeId,
+                    EventId = eventId,
+                    TicketTypeId = ticketType.Id,
+                    Amount = ticketType.Price,
+                    QRCodeLink = qrCodeLink,
+                    FirstName = recipient.FirstName?.Trim() ?? string.Empty,
+                    LastName = recipient.LastName?.Trim() ?? string.Empty,
+                    Email = recipient.Email?.Trim() ?? string.Empty,
+                    CreatedAt = orderNow,
+                    TxnNumber = ticketTxn,
+                    TicketNumber = $"EVT-{eventId}-{orderNow:yyMMdd}-{ticketTxn}",
+                    TicketTypeName = ticketType.Name,
+                    PaymentStatus = TransactionStatus.New.ToString()
+                };
+                tickets.Add(ticket);
+            }
+        }
+        order.Tickets = tickets;
+        order.TotalAmount = tickets.Sum(t => t.Amount);
+        ctx.Orders.Update(order);
+        await ctx.SaveChangesAsync();
+
+        var redirectUrl = !string.IsNullOrEmpty(request.RedirectUrl)
+            ? request.RedirectUrl
+            : ticketEvent.RedirectUrl ?? string.Empty;
+        var invoice = await CreateInvoiceForOrder(store, order, ticketEvent.Currency, redirectUrl);
+
+        order.InvoiceId = invoice.Id;
+        order.InvoiceStatus = invoice.Status.ToString();
+        ctx.Orders.Update(order);
+        await ctx.SaveChangesAsync();
+
+        var checkoutUrl = _linkGenerator.InvoiceCheckoutLink(invoice.Id, Request.GetRequestBaseUrl());
+        return StatusCode(201, new PurchaseResponse
+        {
+            OrderId = order.Id,
+            TxnId = order.TxnId,
+            InvoiceId = invoice.Id,
+            CheckoutUrl = checkoutUrl
+        });
+    }
+
+    private async Task<BTCPayServer.Services.Invoices.InvoiceEntity> CreateInvoiceForOrder(
+        StoreData store, Order order, string currency, string redirectUrl)
+    {
+        var ticketSalesSearchTerm = $"{SimpleTicketSalesHostedService.TICKET_SALES_PREFIX}{order.TxnId}";
+        var matchedExistingInvoices = await _invoiceRepository.GetInvoices(new InvoiceQuery
+        {
+            TextSearch = ticketSalesSearchTerm,
+            StoreId = new[] { store.Id }
+        });
+        matchedExistingInvoices = matchedExistingInvoices
+            .Where(entity => entity.GetInternalTags(ticketSalesSearchTerm).Any(s => s == order.TxnId.ToString()))
+            .ToArray();
+
+        var settledInvoice = matchedExistingInvoices.LastOrDefault(entity =>
+            new[] { "settled", "processing", "confirmed", "paid", "complete" }
+                .Contains(entity.GetInvoiceState().Status.ToString().ToLower()));
+        if (settledInvoice != null)
+            return settledInvoice;
+
+        var invoiceRequest = new CreateInvoiceRequest
+        {
+            Amount = order.TotalAmount,
+            Currency = currency,
+            Metadata = new JObject
+            {
+                ["orderId"] = order.Id,
+                ["TxnId"] = order.TxnId
+            },
+            AdditionalSearchTerms = new[]
+            {
+                order.TxnId.ToString(CultureInfo.InvariantCulture),
+                order.Id.ToString(CultureInfo.InvariantCulture),
+                ticketSalesSearchTerm
+            }
+        };
+        if (!string.IsNullOrEmpty(redirectUrl))
+        {
+            invoiceRequest.Checkout = new()
+            {
+                RedirectURL = redirectUrl
+            };
+        }
+        return await _invoiceController.CreateInvoiceCoreRaw(invoiceRequest, store,
+            Request.GetAbsoluteRoot(), new List<string> { ticketSalesSearchTerm });
     }
 
     [HttpPost("orders/{orderId}/tickets/{ticketId}/send-reminder")]

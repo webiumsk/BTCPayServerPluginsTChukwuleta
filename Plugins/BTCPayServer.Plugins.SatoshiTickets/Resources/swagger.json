@@ -728,6 +728,62 @@
         "security": [{ "API_Key": ["btcpay.store.canmodifystoresettings"] }]
       }
     },
+    "/events/{eventId}/purchase": {
+      "post": {
+        "tags": ["Orders"],
+        "summary": "Create ticket purchase",
+        "description": "Creates a ticket order programmatically and returns the BTCPay invoice checkout URL. Use this to integrate ticket sales with external systems (e.g. WooCommerce).\n\n**Flow:** Validates event, ticket types, and availability → creates Order and Tickets in DB → creates BTCPay invoice → returns checkout URL for payment.",
+        "operationId": "createPurchase",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/eventId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePurchaseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Purchase created — returns order ID, invoice ID, and checkout URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Event or ticket type not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GreenfieldError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation error (insufficient quantity, recipients count mismatch, event not active, invalid email, etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GreenfieldError"
+                }
+              }
+            }
+          }
+        },
+        "security": [{ "API_Key": ["btcpay.store.canmodifystoresettings"] }]
+      }
+    },
     "/events/{eventId}/orders": {
       "get": {
         "tags": ["Orders"],
@@ -1413,6 +1469,88 @@
             ],
             "nullable": true,
             "description": "The ticket data, or `null` if the ticket was invalid."
+          }
+        }
+      },
+      "CreatePurchaseRequest": {
+        "type": "object",
+        "required": ["tickets"],
+        "description": "Request body for creating a ticket purchase.",
+        "properties": {
+          "tickets": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/PurchaseTicketItemRequest"
+            },
+            "description": "List of ticket types with quantities and recipients."
+          },
+          "redirectUrl": {
+            "type": "string",
+            "description": "URL to redirect the customer to after successful payment. Overrides event's redirect URL if set."
+          }
+        }
+      },
+      "PurchaseTicketItemRequest": {
+        "type": "object",
+        "required": ["ticketTypeId", "quantity", "recipients"],
+        "properties": {
+          "ticketTypeId": {
+            "type": "string",
+            "description": "UUID of the ticket type."
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Number of tickets to purchase."
+          },
+          "recipients": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecipientRequest"
+            },
+            "description": "Contact info for each ticket. Length must equal quantity."
+          }
+        }
+      },
+      "RecipientRequest": {
+        "type": "object",
+        "required": ["email"],
+        "properties": {
+          "firstName": {
+            "type": "string",
+            "description": "Recipient's first name."
+          },
+          "lastName": {
+            "type": "string",
+            "description": "Recipient's last name."
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "Recipient's email address (required)."
+          }
+        }
+      },
+      "PurchaseResponse": {
+        "type": "object",
+        "description": "Response when a purchase is created successfully.",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "description": "The created order ID."
+          },
+          "txnId": {
+            "type": "string",
+            "description": "Transaction ID for this purchase."
+          },
+          "invoiceId": {
+            "type": "string",
+            "description": "BTCPay Server invoice ID."
+          },
+          "checkoutUrl": {
+            "type": "string",
+            "description": "Full URL to the invoice checkout page for payment."
           }
         }
       },
