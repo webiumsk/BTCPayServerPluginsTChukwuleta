@@ -197,7 +197,7 @@ public class GreenfieldSatoshiTicketsController : ControllerBase
             return EventNotFound();
 
         var now = DateTime.UtcNow;
-        if (ticketEvent.EventState == EntityState.Disabled)
+        if (ticketEvent.EventState == Data.EntityState.Disabled)
             return this.CreateAPIError(422, "event-not-active", "The event is not active");
         if (ticketEvent.StartDate.Date < now.Date)
             return this.CreateAPIError(422, "event-expired", "The event has already started or ended");
@@ -225,7 +225,7 @@ public class GreenfieldSatoshiTicketsController : ControllerBase
                 return this.CreateAPIError(404, "ticket-type-not-found",
                     $"Ticket type {item.TicketTypeId} was not found");
 
-            if (ticketType.TicketTypeState == EntityState.Disabled)
+            if (ticketType.TicketTypeState == Data.EntityState.Disabled)
                 return this.CreateAPIError(422, "ticket-type-not-active",
                     $"Ticket type {ticketType.Name} is not active");
 
@@ -312,7 +312,7 @@ public class GreenfieldSatoshiTicketsController : ControllerBase
     }
 
     private async Task<BTCPayServer.Services.Invoices.InvoiceEntity> CreateInvoiceForOrder(
-        StoreData store, Order order, string currency, string redirectUrl)
+        BTCPayServer.Data.StoreData store, Order order, string currency, string redirectUrl)
     {
         var ticketSalesSearchTerm = $"{SimpleTicketSalesHostedService.TICKET_SALES_PREFIX}{order.TxnId}";
         var matchedExistingInvoices = await _invoiceRepository.GetInvoices(new InvoiceQuery
@@ -330,7 +330,7 @@ public class GreenfieldSatoshiTicketsController : ControllerBase
         if (settledInvoice != null)
             return settledInvoice;
 
-        var invoiceRequest = new CreateInvoiceRequest
+        var invoiceRequest = new BTCPayServer.Client.Models.CreateInvoiceRequest
         {
             Amount = order.TotalAmount,
             Currency = currency,
