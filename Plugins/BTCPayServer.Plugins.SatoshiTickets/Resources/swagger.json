@@ -784,6 +784,62 @@
         "security": [{ "API_Key": ["btcpay.store.canmodifystoresettings"] }]
       }
     },
+    "/events/{eventId}/create-tickets-offline": {
+      "post": {
+        "tags": ["Orders"],
+        "summary": "Create tickets (offline payment)",
+        "description": "Creates tickets without a BTCPay invoice. Use when payment was already received outside BTCPay (e.g. bank transfer, cash, COD). Validates event and ticket types, creates Order and Tickets with `PaymentStatus=Settled`, updates stock (QuantitySold), and sends ticket emails to recipients.\n\n**Difference from purchase:** Does not create an invoice or checkout URL; the order is immediately settled.",
+        "operationId": "createTicketsOffline",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/eventId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTicketsOfflineRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tickets created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateTicketsOfflineResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Event or ticket type not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GreenfieldError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation error (insufficient quantity, recipients count mismatch, event not active, invalid email, etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GreenfieldError"
+                }
+              }
+            }
+          }
+        },
+        "security": [{ "API_Key": ["btcpay.store.canmodifystoresettings"] }]
+      }
+    },
     "/events/{eventId}/orders": {
       "get": {
         "tags": ["Orders"],
@@ -1488,6 +1544,53 @@
           "redirectUrl": {
             "type": "string",
             "description": "URL to redirect the customer to after successful payment. Overrides event's redirect URL if set."
+          },
+          "orderTotal": {
+            "type": "number",
+            "format": "decimal",
+            "nullable": true,
+            "description": "Optional. When set (e.g. by WooCommerce), the invoice amount uses this value instead of the sum of ticket prices. Use for orders with coupons/discounts. Must be > 0 when specified. Cannot exceed the sum of ticket prices."
+          }
+        }
+      },
+      "CreateTicketsOfflineRequest": {
+        "type": "object",
+        "required": ["tickets"],
+        "description": "Request body for creating tickets without a BTCPay invoice (offline payment).",
+        "properties": {
+          "tickets": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/PurchaseTicketItemRequest"
+            },
+            "description": "List of ticket types with quantities and recipients."
+          },
+          "orderReference": {
+            "type": "string",
+            "description": "Optional reference (e.g. WooCommerce order ID) for tracking."
+          }
+        }
+      },
+      "CreateTicketsOfflineResponse": {
+        "type": "object",
+        "description": "Response when tickets are created successfully via offline payment.",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "description": "The created order ID."
+          },
+          "txnId": {
+            "type": "string",
+            "description": "Transaction ID for this order."
+          },
+          "orderReference": {
+            "type": "string",
+            "description": "The order reference passed in the request, if any."
+          },
+          "ticketsCreated": {
+            "type": "integer",
+            "description": "Number of tickets created."
           }
         }
       },

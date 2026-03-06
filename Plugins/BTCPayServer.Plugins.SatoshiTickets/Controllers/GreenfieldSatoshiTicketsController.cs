@@ -187,6 +187,9 @@ public class GreenfieldSatoshiTicketsController : ControllerBase
         if (request?.Tickets == null || request.Tickets.Length == 0)
             return this.CreateAPIError(422, "validation-error", "At least one ticket item is required");
 
+        if (request.OrderTotal.HasValue && request.OrderTotal.Value <= 0)
+            return this.CreateAPIError(422, "validation-error", "OrderTotal must be greater than 0 when specified");
+
         var store = HttpContext.GetStoreData();
         if (store == null || store.Id != storeId)
             return this.CreateAPIError(404, "store-not-found", "The store was not found");
@@ -287,7 +290,16 @@ public class GreenfieldSatoshiTicketsController : ControllerBase
             }
         }
         order.Tickets = tickets;
-        order.TotalAmount = tickets.Sum(t => t.Amount);
+        var ticketsSum = tickets.Sum(t => t.Amount);
+        order.TotalAmount = ticketsSum;
+
+        if (request.OrderTotal.HasValue && request.OrderTotal.Value > 0)
+        {
+            order.TotalAmount = request.OrderTotal.Value;
+            if (request.OrderTotal.Value > ticketsSum)
+                return this.CreateAPIError(422, "validation-error", "OrderTotal cannot exceed the sum of ticket prices");
+        }
+
         ctx.Orders.Update(order);
         await ctx.SaveChangesAsync();
 
@@ -308,6 +320,160 @@ public class GreenfieldSatoshiTicketsController : ControllerBase
             TxnId = order.TxnId,
             InvoiceId = invoice.Id,
             CheckoutUrl = checkoutUrl
+        });
+    }
+
+    [HttpPost("create-tickets-offline")]
+    public async Task<IActionResult> CreateTicketsOffline(string storeId, string eventId, [FromBody] CreateTicketsOfflineRequest request)
+    {
+        if (request?.Tickets == null || request.Tickets.Length == 0)
+            return this.CreateAPIError(422, "validation-error", "At least one ticket item is required");
+
+        await using var ctx = _dbContextFactory.CreateContext();
+        var ticketEvent = ctx.Events.FirstOrDefault(c => c.Id == eventId && c.StoreId == CurrentStoreId);
+        if (ticketEvent == null)
+            return EventNotFound();
+
+        var now = DateTime.UtcNow;
+        if (ticketEvent.EventState == Data.EntityState.Disabled)
+            return this.CreateAPIError(422, "event-not-active", "The event is not active");
+        if (ticketEvent.StartDate.Date < now.Date)
+            return this.CreateAPIError(422, "event-expired", "The event has already started or ended");
+        if (ticketEvent.EndDate.HasValue && ticketEvent.EndDate.Value.Date < now.Date)
+            return this.CreateAPIError(422, "event-expired", "The event has ended");
+
+        if (ticketEvent.HasMaximumCapacity && ticketEvent.MaximumEventCapacity.HasValue)
+        {
+            var totalTicketsSold = ctx.Orders.AsNoTracking()
+                .Where(c => c.StoreId == storeId && c.EventId == eventId && c.PaymentStatus == TransactionStatus.Settled.ToString())
+                .SelectMany(c => c.Tickets).Count();
+            if (totalTicketsSold >= ticketEvent.MaximumEventCapacity.Value)
+                return this.CreateAPIError(422, "event-capacity-reached", "The event has reached maximum capacity");
+        }
+
+        var ticketTypes = ctx.TicketTypes.Where(t => t.EventId == eventId).ToDictionary(t => t.Id);
+
+        foreach (var item in request.Tickets)
+        {
+            if (item.Recipients == null || item.Recipients.Length != item.Quantity)
+                return this.CreateAPIError(422, "recipients-count-mismatch",
+                    $"Recipients count must equal quantity ({item.Quantity}) for ticket type {item.TicketTypeId}");
+
+            if (!ticketTypes.TryGetValue(item.TicketTypeId, out var ticketType))
+                return this.CreateAPIError(404, "ticket-type-not-found",
+                    $"Ticket type {item.TicketTypeId} was not found");
+
+            if (ticketType.TicketTypeState == Data.EntityState.Disabled)
+                return this.CreateAPIError(422, "ticket-type-not-active",
+                    $"Ticket type {ticketType.Name} is not active");
+
+            var available = ticketType.Quantity - ticketType.QuantitySold;
+            if (ticketType.Quantity > 0 && available < item.Quantity)
+                return this.CreateAPIError(422, "insufficient-quantity",
+                    $"Insufficient quantity for ticket type {ticketType.Name}. Available: {available}, requested: {item.Quantity}");
+
+            foreach (var recipient in item.Recipients)
+            {
+                if (string.IsNullOrWhiteSpace(recipient?.Email))
+                    return this.CreateAPIError(422, "invalid-email", "Email is required for each recipient");
+            }
+        }
+
+        var txnId = Encoders.Base58.EncodeData(RandomUtils.GetBytes(10));
+        var orderNow = DateTimeOffset.UtcNow;
+        var totalAmount = 0m;
+        foreach (var item in request.Tickets)
+        {
+            var ticketType = ticketTypes[item.TicketTypeId];
+            totalAmount += ticketType.Price * item.Quantity;
+        }
+
+        var order = new Order
+        {
+            TxnId = txnId,
+            EventId = eventId,
+            StoreId = storeId,
+            Currency = ticketEvent.Currency,
+            PaymentStatus = TransactionStatus.Settled.ToString(),
+            InvoiceStatus = "n/a",
+            CreatedAt = orderNow,
+            PurchaseDate = orderNow,
+            TotalAmount = totalAmount
+        };
+        ctx.Orders.Add(order);
+        await ctx.SaveChangesAsync();
+
+        var tickets = new List<Ticket>();
+        foreach (var item in request.Tickets)
+        {
+            var ticketType = ticketTypes[item.TicketTypeId];
+            for (var i = 0; i < item.Quantity; i++)
+            {
+                var recipient = item.Recipients[i];
+                var ticketTxn = Encoders.Base58.EncodeData(RandomUtils.GetBytes(10));
+                var qrCodeLink = Url.Action("EventTicketDisplay", "UITicketSalesPublic",
+                    new { storeId, eventId, orderId = order.Id, txnNumber = ticketTxn },
+                    Request.Scheme, Request.Host.Value);
+                var ticket = new Ticket
+                {
+                    StoreId = storeId,
+                    EventId = eventId,
+                    TicketTypeId = ticketType.Id,
+                    Amount = ticketType.Price,
+                    QRCodeLink = qrCodeLink,
+                    FirstName = recipient.FirstName?.Trim() ?? string.Empty,
+                    LastName = recipient.LastName?.Trim() ?? string.Empty,
+                    Email = recipient.Email?.Trim() ?? string.Empty,
+                    CreatedAt = orderNow,
+                    TxnNumber = ticketTxn,
+                    TicketNumber = $"EVT-{eventId}-{orderNow:yyMMdd}-{ticketTxn}",
+                    TicketTypeName = ticketType.Name,
+                    PaymentStatus = TransactionStatus.Settled.ToString()
+                };
+                tickets.Add(ticket);
+            }
+        }
+        order.Tickets = tickets;
+        ctx.Orders.Update(order);
+        await ctx.SaveChangesAsync();
+
+        var ticketTypesList = ctx.TicketTypes.Where(t => t.EventId == eventId).ToList();
+        var ticketCounts = tickets.GroupBy(t => t.TicketTypeId).ToDictionary(g => g.Key, g => g.Count());
+        foreach (var ticketType in ticketTypesList)
+        {
+            if (ticketCounts.TryGetValue(ticketType.Id, out var count))
+            {
+                ticketType.QuantitySold += count;
+            }
+        }
+        ctx.TicketTypes.UpdateRange(ticketTypesList);
+        await ctx.SaveChangesAsync();
+
+        var sender = await _emailSenderFactory.GetEmailSender(storeId);
+        var settings = await sender.GetEmailSettings();
+        if (settings?.IsComplete() == true)
+        {
+            try
+            {
+                var emailResponse = await _emailService.SendTicketRegistrationEmail(storeId, tickets, ticketEvent);
+                if (emailResponse.IsSuccessful)
+                {
+                    order.EmailSent = true;
+                    ctx.Orders.Update(order);
+                    await ctx.SaveChangesAsync();
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        return Ok(new CreateTicketsOfflineResponse
+        {
+            OrderId = order.Id,
+            TxnId = order.TxnId,
+            OrderReference = request.OrderReference ?? string.Empty,
+            TicketsCreated = tickets.Count
         });
     }
 
