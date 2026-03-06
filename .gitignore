@@ -456,5 +456,4 @@ $RECYCLE.BIN/
 # Plugin build/package output
 plugin-output/
 packaged/
-dist/
 /BTCPayServer.Plugins.SatoshiTickets/
