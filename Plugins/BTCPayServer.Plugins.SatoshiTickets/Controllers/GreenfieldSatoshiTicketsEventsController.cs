@@ -50,7 +50,7 @@ public class GreenfieldSatoshiTicketsEventsController : ControllerBase
     {
         await using var ctx = _dbContextFactory.CreateContext();
 
-        var eventsQuery = ctx.Events.Where(c => c.StoreId == CurrentStoreId);
+        var eventsQuery = ctx.Events.Where(c => c.StoreId == CurrentStoreId && c.EventState == Data.EntityState.Active);
         if (expired)
             eventsQuery = eventsQuery.Where(e => e.StartDate <= DateTime.UtcNow);
 
@@ -75,7 +75,7 @@ public class GreenfieldSatoshiTicketsEventsController : ControllerBase
     {
         await using var ctx = _dbContextFactory.CreateContext();
 
-        var entity = ctx.Events.FirstOrDefault(c => c.Id == eventId && c.StoreId == CurrentStoreId);
+        var entity = ctx.Events.FirstOrDefault(c => c.Id == eventId && c.StoreId == CurrentStoreId && c.EventState == Data.EntityState.Active);
         if (entity == null)
             return EventNotFound();
 
