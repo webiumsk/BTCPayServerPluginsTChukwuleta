@@ -455,13 +455,10 @@ public class GreenfieldSatoshiTicketsController : ControllerBase
         {
             try
             {
-                var emailResponse = await _emailService.SendTicketRegistrationEmail(storeId, tickets, ticketEvent);
-                if (emailResponse.IsSuccessful)
-                {
-                    order.EmailSent = true;
-                    ctx.Orders.Update(order);
-                    await ctx.SaveChangesAsync();
-                }
+                await _emailService.SendTicketRegistrationEmail(storeId, tickets, ticketEvent);
+                order.EmailSent = true;
+                ctx.Orders.Update(order);
+                await ctx.SaveChangesAsync();
             }
             catch
             {
