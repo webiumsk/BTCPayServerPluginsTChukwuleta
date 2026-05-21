@@ -27,7 +27,7 @@ Tieto súbory / endpointy **neprepisovať slepo** pri `git merge upstream/main`:
 |---------|-----|-------------|
 | Offline / manuálne vstupenky | `POST .../satoshi-tickets/events/{eventId}/create-tickets-offline` v `Controllers/GreenfieldSatoshiTicketsController.cs` | WordPress plugin |
 | Greenfield purchase | `CreatePurchase` v tom istom controlleri | WordPress / integrácie |
-| Disabled events v API | `Controllers/GreenfieldSatoshiTicketsEventsController.cs` + query `includeInactive` | Satflux (`TicketService` posiela `includeInactive` + `include_inactive`) |
+| Všetky stavy eventov v API | `Controllers/GreenfieldSatoshiTicketsEventsController.cs` — bez `EventState == Active` v `GetEvents`/`GetEvent` | Satflux (posiela `includeInactive` + `include_inactive`; plugin vracia všetky stavy) |
 | Event raffle bundle | `Event.BundledRaffleId`, `BundledRaffleTicketsPerAdmission`, `Services/SimpleTicketSalesHostedService.cs`, `Services/EventRaffleBundleRequestValidator.cs` | Satflux + **BTCPay Raffle** plugin |
 
 Zmeny v tomto zozname zapisuj do `CHANGELOG-FORK.md` (sekcia príslušnej verzie).
@@ -42,12 +42,12 @@ upstream/main  ──merge──►  integrate/upstream-YYYY-MM  ──►  main
 feature/* (krátkožijúce) ───────┘
 ```
 
-| Vetva | Stav / poznámka (máj 2026) |
+| Vetva | Stav / poznámka (apríl 2026) |
 |-------|----------------------------|
-| `main` | Starší tip bez `create-tickets-offline` — **potrebuje zlúčiť featury** |
-| `feature/greenfield-purchase-api` | Offline + `CreatePurchase` (WordPress) — commit `434d24f` |
-| `feature/return-disabled-events` | Satflux vidí disabled eventy |
-| `feature/event-raffle-bundle` | Raffle bundle — **necommitnuté** zmeny + verzia **1.3.6.0** v csproj |
+| `main` | **1.3.6.0** — purchase, offline tickets, všetky event stavy, raffle bundle |
+| `feature/greenfield-purchase-api` | Zlúčené do `main` |
+| `feature/return-disabled-events` | Zlúčené (predkom greenfield) |
+| `feature/event-raffle-bundle` | Zlúčené do `main` |
 
 ---
 
@@ -55,11 +55,11 @@ feature/* (krátkožijúce) ───────┘
 
 Skontroluj checklist a odškrtni, keď je hotové:
 
-- [ ] Commitnúť `feature/event-raffle-bundle` (migrácia `20260520120000_EventRaffleBundle`, validator, API, hosted service)
-- [ ] Merge do `main` v poradí: `feature/greenfield-purchase-api` → `feature/return-disabled-events` → `feature/event-raffle-bundle`
-- [ ] Vetva `integrate/upstream-2026-05`: `git fetch upstream` + merge `upstream/main` (autor ~**1.3.61**), vyriešiť konflikty v owned súboroch
-- [ ] Bump verzie fork (napr. **1.4.0-webium** alebo **1.4.0** s poznámkou vo `Product` v `.csproj`)
-- [ ] Aktualizovať `CHANGELOG-FORK.md`
+- [x] Commitnúť `feature/event-raffle-bundle` (migrácia `20260520120000_EventRaffleBundle`, validator, API, hosted service)
+- [x] Merge do `main` (`feature/event-raffle-bundle` obsahuje greenfield + disabled events)
+- [ ] Vetva `integrate/upstream-2026-06`: `git fetch upstream` + merge `upstream/main` (autor ~**1.3.61**), vyriešiť konflikty v owned súboroch
+- [x] Verzia fork **1.3.6.0** v `.csproj`
+- [x] Aktualizovať `CHANGELOG-FORK.md`
 - [ ] Build `.btcpay` z `main`, nasadiť na BTCPay, otestovať Satflux + WordPress offline
 - [ ] V [satflux/docs/SATOSHI_TICKETS.md](../../../satflux/docs/SATOSHI_TICKETS.md) doplniť **min. verziu** pluginu
 

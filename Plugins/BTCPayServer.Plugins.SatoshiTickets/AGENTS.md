@@ -27,7 +27,7 @@ Pred každou väčšou zmenou si prečítaj:
 |---------|----------------|
 | Offline / manuálne vstupenky | `Controllers/GreenfieldSatoshiTicketsController.cs` — `create-tickets-offline` |
 | Greenfield purchase | ten istý controller — `CreatePurchase` |
-| Disabled events v liste | `Controllers/GreenfieldSatoshiTicketsEventsController.cs`, query `includeInactive` / `include_inactive` |
+| Všetky stavy eventov v API | `Controllers/GreenfieldSatoshiTicketsEventsController.cs` — `GET /events` bez filtra Active; Satflux query `includeInactive` / `include_inactive` je kompatibilný, parameter sa nevyžaduje |
 | Event raffle bundle | `Data/Entities/Event.cs`, `Services/SimpleTicketSalesHostedService.cs`, `Services/EventRaffleBundleRequestValidator.cs`, migrácia bundle; **ProjectReference** na `BTCPayServer.Plugins.BTCPayRaffle` |
 
 Po zmene fork featury aktualizuj `CHANGELOG-FORK.md` a bump `<Version>` v `BTCPayServer.Plugins.SatoshiTickets.csproj`.
@@ -83,11 +83,11 @@ dotnet build -c Release Plugins/BTCPayServer.Plugins.SatoshiTickets/BTCPayServer
 
 ---
 
-## Otvorené úlohy (stav máj 2026 — over v gite)
+## Otvorené úlohy (stav apríl 2026 — over v gite)
 
-- [ ] Commit + merge `feature/event-raffle-bundle` do `main`
-- [ ] Merge `feature/greenfield-purchase-api`, `feature/return-disabled-events` do `main` ak ešte nie sú
-- [ ] `integrate/upstream-2026-05` → merge TChukwuleta ~1.3.61
-- [ ] Release `.btcpay`, doplniť min. verzie v `satflux/docs/SATOSHI_TICKETS.md`
+- [x] Commit + merge `feature/event-raffle-bundle` do `main`
+- [x] Merge `feature/greenfield-purchase-api` (vrátane disabled events) do `main`
+- [ ] `integrate/upstream-2026-06` → merge TChukwuleta ~1.3.61 (mesačný cyklus)
+- [ ] Release `.btcpay` nasadený; doplniť min. verzie v `satflux/docs/SATOSHI_TICKETS.md`
 
 Keď používateľ pýta „mesačný merge“ alebo „čo robiť s Tickets pluginom“, otvor `FORK_MAINTENANCE.md` a postupuj podľa checklistu.

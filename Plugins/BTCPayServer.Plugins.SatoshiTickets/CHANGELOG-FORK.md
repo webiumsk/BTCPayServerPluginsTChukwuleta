@@ -9,13 +9,22 @@ Postup pri každom release: [FORK_MAINTENANCE.md](./FORK_MAINTENANCE.md).
 
 ## [Unreleased]
 
-### Added
-- **Event raffle bundle** — polia `bundledRaffleId`, `bundledRaffleTicketsPerAdmission` na evente; po `InvoiceSettled` alokácia cez BTCPay Raffle plugin (per e-mail pri `sendIndividually`). Vetva `feature/event-raffle-bundle`, cieľ verzie **1.3.6.0+**.
+### Pending
+- **Upstream merge** — autor `upstream/main` ~1.3.61; integračná vetva `integrate/upstream-2026-06` (plán 2026-06-20).
 
-### Pending merge to `main`
-- **Greenfield purchase API** + **`create-tickets-offline`** (WordPress / manuálne priradenie platby) — vetva `feature/greenfield-purchase-api`.
-- **Return disabled events** v Greenfield liste — vetva `feature/return-disabled-events`.
-- **Upstream merge** — autor `upstream/main` ~1.3.61 (stav k máju 2026); integračná vetva ešte neurobená.
+---
+
+## [1.3.6.0] — 2026-04-08
+
+### Fork
+- **Greenfield purchase API** — `POST .../events/{eventId}/purchase` (checkout URL pre integrácie / WordPress).
+- **`create-tickets-offline`** — manuálne / offline priradenie vstupeniek bez BTCPay invoice.
+- **Všetky stavy eventov v API** — `GET /events` a `GET /events/{id}` vracajú Active aj Disabled (bez filtra `EventState == Active`). Satflux môže posielať `includeInactive` / `include_inactive`; parameter sa ignoruje, odpoveď je vždy kompletná.
+- **Event raffle bundle** — `bundledRaffleId`, `bundledRaffleTicketsPerAdmission`; po `InvoiceSettled` alokácia cez BTCPay Raffle (`SimpleTicketSalesHostedService`).
+- Fork runbook: `AGENTS.md`, `FORK_MAINTENANCE.md`.
+
+### Merged from upstream
+- Base pred fork release: lokálny stav po rebase na `upstream/main` (net10); upstream verzia v čase buildu ~1.3.1–1.3.5 cesta, bez nového upstream merge v tomto release.
 
 ---
 
