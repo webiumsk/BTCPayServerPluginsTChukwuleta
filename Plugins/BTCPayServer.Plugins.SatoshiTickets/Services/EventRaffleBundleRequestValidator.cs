@@ -2,7 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using BTCPayServer.Plugins.BTCPayRaffle.Services;
+using BTCPayServer.Plugins.SatoshiTickets.Services.Integration;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace BTCPayServer.Plugins.SatoshiTickets.Services;
@@ -16,7 +16,7 @@ public static class EventRaffleBundleRequestValidator
         string storeId,
         int bundledTicketsPerAdmission,
         Guid? bundledRaffleId,
-        IRaffleEventBundleService? raffleBundle)
+        IRaffleEventBundleClient? raffleBundle)
     {
         if (bundledTicketsPerAdmission < 0)
         {

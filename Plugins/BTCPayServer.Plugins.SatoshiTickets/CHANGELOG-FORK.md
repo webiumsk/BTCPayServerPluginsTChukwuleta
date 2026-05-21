@@ -14,6 +14,13 @@ Postup pri každom release: [FORK_MAINTENANCE.md](./FORK_MAINTENANCE.md).
 
 ---
 
+## [1.3.6.1] — 2026-05-21
+
+### Fixed
+- Plugin sa načíta aj **bez** nainštalovaného BTCPay Raffle — odstránený compile-time `ProjectReference` na `BTCPayServer.Plugins.BTCPayRaffle`; integrácia cez lazy runtime resolver (`Services/Integration/`).
+
+---
+
 ## [1.3.6.0] — 2026-05-21
 
 ### Fork

@@ -7,8 +7,8 @@ using BTCPayServer.Abstractions.Contracts;
 using BTCPayServer.Abstractions.Extensions;
 using BTCPayServer.Client;
 using BTCPayServer.Data;
-using BTCPayServer.Plugins.BTCPayRaffle.Services;
 using BTCPayServer.Plugins.SatoshiTickets.Data;
+using BTCPayServer.Plugins.SatoshiTickets.Services.Integration;
 using BTCPayServer.Plugins.SatoshiTickets.Models.Api;
 using BTCPayServer.Plugins.SatoshiTickets.Services;
 using BTCPayServer.Services;
@@ -33,18 +33,18 @@ public class GreenfieldSatoshiTicketsEventsController : ControllerBase
     private readonly StoreRepository _storeRepo;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SimpleTicketSalesDbContextFactory _dbContextFactory;
-    private readonly IRaffleEventBundleService _raffleBundle;
+    private readonly IRaffleEventBundleClient? _raffleBundle;
 
     public GreenfieldSatoshiTicketsEventsController(StoreRepository storeRepo, UriResolver uriResolver,
         IFileService fileService, UserManager<ApplicationUser> userManager, SimpleTicketSalesDbContextFactory dbContextFactory,
-        IRaffleEventBundleService raffleBundle = null)
+        RaffleEventBundleClientProvider raffleBundleProvider)
     {
         _storeRepo = storeRepo;
         _uriResolver = uriResolver;
         _fileService = fileService;
         _userManager = userManager;
         _dbContextFactory = dbContextFactory;
-        _raffleBundle = raffleBundle;
+        _raffleBundle = raffleBundleProvider.Client;
     }
 
     private string CurrentStoreId => HttpContext.GetStoreData()?.Id;

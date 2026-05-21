@@ -7,8 +7,8 @@ using BTCPayServer.Data;
 using BTCPayServer.Events;
 using BTCPayServer.HostedServices;
 using BTCPayServer.Logging;
-using BTCPayServer.Plugins.BTCPayRaffle.Services;
 using BTCPayServer.Plugins.Emails.Services;
+using BTCPayServer.Plugins.SatoshiTickets.Services.Integration;
 using BTCPayServer.Plugins.SatoshiTickets.Data;
 using BTCPayServer.Services.Invoices;
 using Microsoft.EntityFrameworkCore;
@@ -24,20 +24,20 @@ public class SimpleTicketSalesHostedService : EventHostedServiceBase, IPeriodicT
     private readonly InvoiceRepository _invoiceRepository;
     private readonly EmailSenderFactory _emailSenderFactory;
     private readonly SimpleTicketSalesDbContextFactory _dbContextFactory;
-    private readonly IRaffleEventBundleService _raffleBundle;
+    private readonly IRaffleEventBundleClient? _raffleBundle;
 
     public SimpleTicketSalesHostedService(EmailService emailService,
         EventAggregator eventAggregator,
         EmailSenderFactory emailSenderFactory,
         InvoiceRepository invoiceRepository,
         SimpleTicketSalesDbContextFactory dbContextFactory, Logs logs,
-        IRaffleEventBundleService raffleBundle = null) : base(eventAggregator, logs)
+        RaffleEventBundleClientProvider raffleBundleProvider) : base(eventAggregator, logs)
     {
         _emailService = emailService;
         _dbContextFactory = dbContextFactory;
         _invoiceRepository = invoiceRepository;
         _emailSenderFactory = emailSenderFactory;
-        _raffleBundle = raffleBundle;
+        _raffleBundle = raffleBundleProvider.Client;
     }
 
     protected override void SubscribeToEvents()
@@ -205,7 +205,7 @@ public class SimpleTicketSalesHostedService : EventHostedServiceBase, IPeriodicT
                 var perAdmission = ticketEvent.BundledRaffleTicketsPerAdmission;
                 var byEmail = order.Tickets
                     .Where(t => !string.IsNullOrWhiteSpace(t.Email))
-                    .GroupBy(t => RaffleBuyerEmail.Normalize(t.Email))
+                    .GroupBy(t => NormalizeBuyerEmail(t.Email))
                     .Where(g => !string.IsNullOrEmpty(g.Key));
 
                 foreach (var group in byEmail)
@@ -253,6 +253,13 @@ public class SimpleTicketSalesHostedService : EventHostedServiceBase, IPeriodicT
         ctx.Orders.Update(order);
         await ctx.SaveChangesAsync();
         await _invoiceRepository.AddInvoiceLogs(invoice.Id, result);
+    }
+
+    private static string? NormalizeBuyerEmail(string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return null;
+        return email.Trim().ToLowerInvariant();
     }
 }
 

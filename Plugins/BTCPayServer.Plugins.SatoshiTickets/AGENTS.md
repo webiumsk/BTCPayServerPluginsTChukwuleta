@@ -28,7 +28,7 @@ Pred každou väčšou zmenou si prečítaj:
 | Offline / manuálne vstupenky | `Controllers/GreenfieldSatoshiTicketsController.cs` — `create-tickets-offline` |
 | Greenfield purchase | ten istý controller — `CreatePurchase` |
 | Všetky stavy eventov v API | `Controllers/GreenfieldSatoshiTicketsEventsController.cs` — `GET /events` bez filtra Active; Satflux query `includeInactive` / `include_inactive` je kompatibilný, parameter sa nevyžaduje |
-| Event raffle bundle | `Data/Entities/Event.cs`, `Services/SimpleTicketSalesHostedService.cs`, `Services/EventRaffleBundleRequestValidator.cs`, migrácia bundle; **ProjectReference** na `BTCPayServer.Plugins.BTCPayRaffle` |
+| Event raffle bundle | `Data/Entities/Event.cs`, `Services/SimpleTicketSalesHostedService.cs`, `Services/EventRaffleBundleRequestValidator.cs`, `Services/Integration/RaffleEventBundleClientResolver.cs` (voliteľný runtime bridge — **žiadny** compile-time ref na Raffle) |
 
 Po zmene fork featury aktualizuj `CHANGELOG-FORK.md` a bump `<Version>` v `BTCPayServer.Plugins.SatoshiTickets.csproj`.
 
@@ -69,7 +69,7 @@ dotnet build -c Release Plugins/BTCPayServer.Plugins.SatoshiTickets/BTCPayServer
 1. **Minimálny diff** — nerefaktoruj upstream kód bez dôvodu.
 2. **Konvencie BTCPay** — Greenfield validation errors, `CreateAPIError`, `EnsureStoreOwnership` cez store context.
 3. **Migrácie** — nové stĺpce cez EF migráciu + `SimpleTicketSalesDbContextModelSnapshot.cs`.
-4. **Voliteľná závislosť na Raffle** — `IRaffleEventBundleService` môže byť null ak Raffle plugin nie je nainštalovaný; validácia pri uložení eventu musí zlyhať zrozumiteľne ak bundle zapnutý bez Raffle.
+4. **Voliteľná závislosť na Raffle** — `IRaffleEventBundleClient` sa rieši cez reflection len ak je Raffle plugin nainštalovaný; bez Raffle musí plugin načítať (žiadny `ProjectReference` na Raffle DLL). Validácia pri bundle poliach musí zlyhať zrozumiteľne, ak Raffle chýba.
 5. **Commity** — len na explicitnú žiadosť používateľa.
 6. Pri úprave API, ktoré volá Satflux, skontroluj camelCase payload (`bundledRaffleId`, `startDate`, …) a prípadne test v `satflux/tests/Feature/Ticket*.php`.
 
