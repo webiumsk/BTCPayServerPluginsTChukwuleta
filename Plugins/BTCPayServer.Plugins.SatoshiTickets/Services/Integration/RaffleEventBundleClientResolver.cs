@@ -73,22 +73,25 @@ internal sealed class ReflectionRaffleEventBundleClient : IRaffleEventBundleClie
     {
         _target = target;
         _resultType = resultType;
-        _validateMethod = serviceType.GetMethod(
-            nameof(ValidateBundledRaffleAsync),
-            [typeof(string), typeof(Guid)])!;
-        _allocateMethod = serviceType.GetMethod(
-            nameof(AllocateForEventOrderAsync),
-            [typeof(string), typeof(Guid), typeof(int), typeof(string), typeof(string), typeof(string), typeof(string)])!;
+        var implType = target.GetType();
+        _validateMethod = implType.GetMethod(
+            "ValidateBundledRaffleAsync",
+            BindingFlags.Public | BindingFlags.Instance,
+            null,
+            [typeof(string), typeof(Guid)],
+            null)!;
+        _allocateMethod = implType.GetMethod(
+            "AllocateForEventOrderAsync",
+            BindingFlags.Public | BindingFlags.Instance,
+            null,
+            [typeof(string), typeof(Guid), typeof(int), typeof(string), typeof(string), typeof(string), typeof(string)],
+            null)!;
     }
 
     public async Task<(bool Ok, string? Error)> ValidateBundledRaffleAsync(string storeId, Guid raffleId)
     {
-        var task = (Task)_validateMethod.Invoke(_target, [storeId, raffleId])!;
-        await task.ConfigureAwait(false);
-        var result = task.GetType().GetProperty("Result")!.GetValue(task);
-        var ok = (bool)result!.GetType().GetProperty("Item1")!.GetValue(result)!;
-        var error = (string?)result.GetType().GetProperty("Item2")!.GetValue(result);
-        return (ok, error);
+        var result = await InvokeAsync(_validateMethod, [storeId, raffleId]).ConfigureAwait(false);
+        return ReadValueTupleBoolString(result);
     }
 
     public async Task<RaffleBundleAllocationResult> AllocateForEventOrderAsync(
@@ -100,11 +103,36 @@ internal sealed class ReflectionRaffleEventBundleClient : IRaffleEventBundleClie
         string eventOrderId,
         string baseUrl)
     {
-        var task = (Task)_allocateMethod.Invoke(_target,
-            [storeId, raffleId, count, buyerEmail, buyerName, eventOrderId, baseUrl])!;
-        await task.ConfigureAwait(false);
-        var result = task.GetType().GetProperty("Result")!.GetValue(task);
+        var result = await InvokeAsync(_allocateMethod,
+            [storeId, raffleId, count, buyerEmail, buyerName, eventOrderId, baseUrl]).ConfigureAwait(false);
         return MapResult(result);
+    }
+
+    private async Task<object?> InvokeAsync(MethodInfo method, object?[] args)
+    {
+        var taskObj = method.Invoke(_target, args)
+            ?? throw new InvalidOperationException("Raffle bundle service returned null");
+        if (taskObj is not Task task)
+            throw new InvalidOperationException("Raffle bundle service did not return a Task");
+
+        await task.ConfigureAwait(false);
+        return taskObj.GetType().GetProperty("Result")?.GetValue(taskObj);
+    }
+
+    private static (bool Ok, string? Error) ReadValueTupleBoolString(object? result)
+    {
+        if (result is null)
+            return (false, "Empty raffle validation response");
+
+        var type = result.GetType();
+        var okProp = type.GetProperty("Item1") ?? type.GetProperty("Ok");
+        var errProp = type.GetProperty("Item2") ?? type.GetProperty("Error");
+        if (okProp is null)
+            return (false, "Invalid raffle validation response");
+
+        var ok = (bool)okProp.GetValue(result)!;
+        var error = errProp?.GetValue(result) as string;
+        return (ok, error);
     }
 
     private RaffleBundleAllocationResult MapResult(object? result)
