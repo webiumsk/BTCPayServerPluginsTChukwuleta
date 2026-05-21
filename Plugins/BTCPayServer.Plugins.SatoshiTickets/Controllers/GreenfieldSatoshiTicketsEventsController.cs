@@ -7,6 +7,7 @@ using BTCPayServer.Abstractions.Contracts;
 using BTCPayServer.Abstractions.Extensions;
 using BTCPayServer.Client;
 using BTCPayServer.Data;
+using BTCPayServer.Plugins.BTCPayRaffle.Services;
 using BTCPayServer.Plugins.SatoshiTickets.Data;
 using BTCPayServer.Plugins.SatoshiTickets.Models.Api;
 using BTCPayServer.Plugins.SatoshiTickets.Services;
@@ -32,15 +33,18 @@ public class GreenfieldSatoshiTicketsEventsController : ControllerBase
     private readonly StoreRepository _storeRepo;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SimpleTicketSalesDbContextFactory _dbContextFactory;
+    private readonly IRaffleEventBundleService _raffleBundle;
 
     public GreenfieldSatoshiTicketsEventsController(StoreRepository storeRepo, UriResolver uriResolver,
-        IFileService fileService, UserManager<ApplicationUser> userManager, SimpleTicketSalesDbContextFactory dbContextFactory)
+        IFileService fileService, UserManager<ApplicationUser> userManager, SimpleTicketSalesDbContextFactory dbContextFactory,
+        IRaffleEventBundleService raffleBundle = null)
     {
         _storeRepo = storeRepo;
         _uriResolver = uriResolver;
         _fileService = fileService;
         _userManager = userManager;
         _dbContextFactory = dbContextFactory;
+        _raffleBundle = raffleBundle;
     }
 
     private string CurrentStoreId => HttpContext.GetStoreData()?.Id;
@@ -110,6 +114,9 @@ public class GreenfieldSatoshiTicketsEventsController : ControllerBase
         if (string.IsNullOrEmpty(request.EventType) || !Enum.TryParse<EventType>(request.EventType, true, out parsedEventType))
             ModelState.AddModelError(nameof(request.EventType), "Invalid event type. Valid values: Virtual, Physical");
 
+        await EventRaffleBundleRequestValidator.ApplyBundleFieldsAsync(
+            ModelState, CurrentStoreId, request.BundledRaffleTicketsPerAdmission, request.BundledRaffleId, _raffleBundle);
+
         if (!ModelState.IsValid)
             return this.CreateValidationError(ModelState);
 
@@ -137,6 +144,7 @@ public class GreenfieldSatoshiTicketsEventsController : ControllerBase
             EventState = request.Enable ? Data.EntityState.Active : Data.EntityState.Disabled,
             CreatedAt = DateTime.UtcNow
         };
+        ApplyBundleFields(entity, request.BundledRaffleTicketsPerAdmission, request.BundledRaffleId);
         /*if (!string.IsNullOrEmpty(request.EventLogoFileId))
             entity.EventLogo = request.EventLogoFileId;*/
 
@@ -178,6 +186,17 @@ public class GreenfieldSatoshiTicketsEventsController : ControllerBase
         if (!string.IsNullOrEmpty(request.EventType) && !Enum.TryParse<EventType>(request.EventType, true, out _))
             ModelState.AddModelError(nameof(request.EventType), "Invalid event type. Valid values: Virtual, Physical");
 
+        var bundlePerAdmission = request.BundledRaffleTicketsPerAdmission ?? entity.BundledRaffleTicketsPerAdmission;
+        var bundleRaffleId = request.BundledRaffleId ?? entity.BundledRaffleId;
+        if (request.BundledRaffleTicketsPerAdmission is 0)
+        {
+            bundlePerAdmission = 0;
+            bundleRaffleId = null;
+        }
+
+        await EventRaffleBundleRequestValidator.ApplyBundleFieldsAsync(
+            ModelState, CurrentStoreId, bundlePerAdmission, bundleRaffleId, _raffleBundle);
+
         if (!ModelState.IsValid)
             return this.CreateValidationError(ModelState);
 
@@ -202,6 +221,9 @@ public class GreenfieldSatoshiTicketsEventsController : ControllerBase
         {
             entity.EventLogo = string.IsNullOrEmpty(request.EventLogoFileId) ? null : request.EventLogoFileId;
         }*/
+
+        if (request.BundledRaffleTicketsPerAdmission.HasValue || request.BundledRaffleId.HasValue)
+            ApplyBundleFields(entity, bundlePerAdmission, bundleRaffleId);
 
         ctx.Events.Update(entity);
         await ctx.SaveChangesAsync();
@@ -350,9 +372,17 @@ public class GreenfieldSatoshiTicketsEventsController : ControllerBase
             EventLogoFileId = entity.EventLogo,
             EventLogoUrl = eventLogoUrl,
             CreatedAt = entity.CreatedAt,
+            BundledRaffleId = entity.BundledRaffleId,
+            BundledRaffleTicketsPerAdmission = entity.BundledRaffleTicketsPerAdmission,
             PurchaseLink = Url.Action(nameof(UITicketSalesPublicController.EventSummary), "UITicketSalesPublic",
                 new { storeId = entity.StoreId, eventId = entity.Id }, Request.Scheme)
         };
+    }
+
+    private static void ApplyBundleFields(Event entity, int perAdmission, Guid? raffleId)
+    {
+        entity.BundledRaffleTicketsPerAdmission = Math.Max(0, perAdmission);
+        entity.BundledRaffleId = entity.BundledRaffleTicketsPerAdmission > 0 ? raffleId : null;
     }
 
     private IActionResult EventNotFound()

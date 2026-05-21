@@ -7,6 +7,7 @@ using BTCPayServer.Data;
 using BTCPayServer.Events;
 using BTCPayServer.HostedServices;
 using BTCPayServer.Logging;
+using BTCPayServer.Plugins.BTCPayRaffle.Services;
 using BTCPayServer.Plugins.Emails.Services;
 using BTCPayServer.Plugins.SatoshiTickets.Data;
 using BTCPayServer.Services.Invoices;
@@ -23,17 +24,20 @@ public class SimpleTicketSalesHostedService : EventHostedServiceBase, IPeriodicT
     private readonly InvoiceRepository _invoiceRepository;
     private readonly EmailSenderFactory _emailSenderFactory;
     private readonly SimpleTicketSalesDbContextFactory _dbContextFactory;
+    private readonly IRaffleEventBundleService _raffleBundle;
 
     public SimpleTicketSalesHostedService(EmailService emailService,
         EventAggregator eventAggregator,
         EmailSenderFactory emailSenderFactory,
         InvoiceRepository invoiceRepository,
-        SimpleTicketSalesDbContextFactory dbContextFactory, Logs logs) : base(eventAggregator, logs)
+        SimpleTicketSalesDbContextFactory dbContextFactory, Logs logs,
+        IRaffleEventBundleService raffleBundle = null) : base(eventAggregator, logs)
     {
         _emailService = emailService;
         _dbContextFactory = dbContextFactory;
         _invoiceRepository = invoiceRepository;
         _emailSenderFactory = emailSenderFactory;
+        _raffleBundle = raffleBundle;
     }
 
     protected override void SubscribeToEvents()
@@ -192,6 +196,58 @@ public class SimpleTicketSalesHostedService : EventHostedServiceBase, IPeriodicT
                     await _emailService.SendTicketRegistrationEmail(invoice.StoreId, order.Tickets, ticketEvent);
                 }
                 catch { result.Write($"Failed to send email for Order Id: {order.Id}.", InvoiceEventData.EventSeverity.Error); }
+            }
+
+            if (_raffleBundle != null && ticketEvent?.BundledRaffleId is Guid raffleId
+                && ticketEvent.BundledRaffleTicketsPerAdmission > 0)
+            {
+                var baseUrl = invoice.ServerUrl ?? "";
+                var perAdmission = ticketEvent.BundledRaffleTicketsPerAdmission;
+                var byEmail = order.Tickets
+                    .Where(t => !string.IsNullOrWhiteSpace(t.Email))
+                    .GroupBy(t => RaffleBuyerEmail.Normalize(t.Email))
+                    .Where(g => !string.IsNullOrEmpty(g.Key));
+
+                foreach (var group in byEmail)
+                {
+                    var ticketCount = group.Count();
+                    var totalRaffle = ticketCount * perAdmission;
+                    var first = group.First();
+                    var buyerName = $"{first.FirstName} {first.LastName}".Trim();
+                    if (string.IsNullOrWhiteSpace(buyerName))
+                        buyerName = null;
+
+                    try
+                    {
+                        var alloc = await _raffleBundle.AllocateForEventOrderAsync(
+                            invoice.StoreId,
+                            raffleId,
+                            totalRaffle,
+                            group.Key,
+                            buyerName,
+                            order.Id,
+                            baseUrl);
+
+                        if (!alloc.Success)
+                        {
+                            result.Write(
+                                $"Raffle bundle failed for {group.Key}: {alloc.Error}",
+                                InvoiceEventData.EventSeverity.Error);
+                        }
+                        else if (alloc.TicketsAllocated > 0)
+                        {
+                            result.Write(
+                                $"Allocated {alloc.TicketsAllocated} raffle ticket(s) for {group.Key}",
+                                InvoiceEventData.EventSeverity.Success);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        result.Write(
+                            $"Raffle bundle failed for {group.Key}: {ex.Message}",
+                            InvoiceEventData.EventSeverity.Error);
+                    }
+                }
             }
         }
         ctx.Orders.Update(order);

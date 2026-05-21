@@ -77,6 +77,12 @@ namespace BTCPayServer.Plugins.SatoshiTickets.Data.Migrations
                     b.Property<DateTimeOffset?>("ReminderSentAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("BundledRaffleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("BundledRaffleTicketsPerAdmission")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("StartDate")
                         .HasColumnType("timestamp with time zone");
 

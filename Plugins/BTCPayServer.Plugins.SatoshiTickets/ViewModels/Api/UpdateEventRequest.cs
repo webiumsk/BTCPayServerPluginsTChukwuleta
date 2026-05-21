@@ -20,4 +20,6 @@ public class UpdateEventRequest
     public bool HasMaximumCapacity { get; set; }
     public int? MaximumEventCapacity { get; set; }
     public string EventLogoFileId { get; set; }
+    public Guid? BundledRaffleId { get; set; }
+    public int? BundledRaffleTicketsPerAdmission { get; set; }
 }
