@@ -14,7 +14,7 @@ Postup pri každom release: [FORK_MAINTENANCE.md](./FORK_MAINTENANCE.md).
 
 ---
 
-## [1.3.6.0] — 2026-04-08
+## [1.3.6.0] — 2026-05-21
 
 ### Fork
 - **Greenfield purchase API** — `POST .../events/{eventId}/purchase` (checkout URL pre integrácie / WordPress).
