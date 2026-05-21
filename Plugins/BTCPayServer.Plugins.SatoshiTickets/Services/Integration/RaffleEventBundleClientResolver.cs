@@ -124,15 +124,18 @@ internal sealed class ReflectionRaffleEventBundleClient : IRaffleEventBundleClie
         if (result is null)
             return (false, "Empty raffle validation response");
 
+        // ValueTuple uses public fields Item1/Item2, not properties.
         var type = result.GetType();
-        var okProp = type.GetProperty("Item1") ?? type.GetProperty("Ok");
-        var errProp = type.GetProperty("Item2") ?? type.GetProperty("Error");
-        if (okProp is null)
+        var okField = type.GetField("Item1") ?? type.GetField("Ok");
+        if (okField is null)
             return (false, "Invalid raffle validation response");
 
-        var ok = (bool)okProp.GetValue(result)!;
-        var error = errProp?.GetValue(result) as string;
-        return (ok, error);
+        if (okField.GetValue(result) is not bool okBool)
+            return (false, "Invalid raffle validation response");
+
+        var errField = type.GetField("Item2") ?? type.GetField("Error");
+        var errorValue = errField?.GetValue(result) as string;
+        return (okBool, errorValue);
     }
 
     private RaffleBundleAllocationResult MapResult(object? result)

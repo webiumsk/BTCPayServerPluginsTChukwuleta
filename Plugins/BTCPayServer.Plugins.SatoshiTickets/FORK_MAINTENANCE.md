@@ -44,7 +44,7 @@ feature/* (krátkožijúce) ───────┘
 
 | Vetva | Stav / poznámka (máj 2026) |
 |-------|----------------------------|
-| `main` | **1.3.6.3** — purchase, offline tickets, všetky event stavy, raffle bundle + reflection fix |
+| `main` | **1.3.6.4** — purchase, offline tickets, všetky event stavy, raffle bundle + reflection fixes |
 | `feature/greenfield-purchase-api` | Zlúčené do `main` |
 | `feature/return-disabled-events` | Zlúčené (predkom greenfield) |
 | `feature/event-raffle-bundle` | Zlúčené do `main` |
@@ -58,7 +58,7 @@ Skontroluj checklist a odškrtni, keď je hotové:
 - [x] Commitnúť `feature/event-raffle-bundle` (migrácia `20260520120000_EventRaffleBundle`, validator, API, hosted service)
 - [x] Merge do `main` (`feature/event-raffle-bundle` obsahuje greenfield + disabled events)
 - [ ] Vetva `integrate/upstream-2026-06`: `git fetch upstream` + merge `upstream/main` (autor ~**1.3.61**), vyriešiť konflikty v owned súboroch
-- [x] Verzia fork **1.3.6.3** v `.csproj`
+- [x] Verzia fork **1.3.6.4** v `.csproj`
 - [x] Aktualizovať `CHANGELOG-FORK.md`
 - [ ] Build `.btcpay` z `main`, nasadiť na BTCPay, otestovať Satflux + WordPress offline
 - [ ] V [satflux/docs/SATOSHI_TICKETS.md](../../../satflux/docs/SATOSHI_TICKETS.md) doplniť **min. verziu** pluginu
@@ -145,7 +145,7 @@ VALUES ('20260520120000_EventRaffleBundle', '8.0.11')
 ON CONFLICT ("MigrationId") DO NOTHING;
 ```
 
-**Trvalé:** nasaď build **≥ 1.3.6.2** (s `EventRaffleBundle.Designer.cs`), reštart BTCPay, v logu očakávaj `Satoshi Tickets: applying ... EventRaffleBundle`. Pre bundle validáciu použij **≥ 1.3.6.3**.
+**Trvalé:** nasaď build **≥ 1.3.6.2** (s `EventRaffleBundle.Designer.cs`), reštart BTCPay. Pre bundle validáciu **≥ 1.3.6.4**.
 
 ---
 
@@ -155,7 +155,15 @@ Pri vytváraní eventu s raffle bundlom plugin spadne, BTCPay ho **vypne** (`Ski
 
 **Príčina (1.3.6.0–1.3.6.2):** reflection čítal `Result` z `Task` (non-generic) namiesto z `Task<(bool, string?)>` → `Result` je `null`.
 
-**Fix:** nasaď **≥ 1.3.6.3**, v BTCPay **Account → Plugins** znova povoli Satoshi Tickets (alebo nahraď `.btcpay` a reštart). Raffle musí bežať **≥ 1.3.1.0**.
+**Fix:** nasaď **≥ 1.3.6.3**, v BTCPay **Account → Plugins** znova povoli Satoshi Tickets (alebo nahraď `.btcpay` a reštart). Raffle musí bežať **≥ 1.3.1.0**. Pre „Invalid raffle validation response“ použij **≥ 1.3.6.4**.
+
+---
+
+## Hotfix: `Invalid raffle validation response` pri `bundledRaffleId`
+
+**Príčina (1.3.6.3):** reflection čítal `Item1`/`Item2` cez `GetProperty`, ale `ValueTuple` ich má ako **polia** → vždy 422 s touto správou (aj pri platnom raffle).
+
+**Fix:** nasaď **≥ 1.3.6.4**.
 
 ---
 
