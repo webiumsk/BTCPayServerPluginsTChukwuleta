@@ -45,7 +45,7 @@ public static class EventRaffleBundleRequestValidator
         if (raffleBundle is null)
         {
             modelState.AddModelError(nameof(bundledRaffleId),
-                "BTCPay Raffle plugin is required for raffle ticket bundles");
+                "Event raffle bundles require BTCPay Raffle plugin 1.3.1 or newer on this server. Upgrade the Raffle plugin, or set raffle tickets per admission to 0.");
             return;
         }
 

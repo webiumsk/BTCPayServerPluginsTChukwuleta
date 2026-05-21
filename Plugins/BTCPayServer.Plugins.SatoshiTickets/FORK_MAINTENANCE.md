@@ -42,9 +42,9 @@ upstream/main  ──merge──►  integrate/upstream-YYYY-MM  ──►  main
 feature/* (krátkožijúce) ───────┘
 ```
 
-| Vetva | Stav / poznámka (apríl 2026) |
+| Vetva | Stav / poznámka (máj 2026) |
 |-------|----------------------------|
-| `main` | **1.3.6.0** — purchase, offline tickets, všetky event stavy, raffle bundle |
+| `main` | **1.3.6.2** — purchase, offline tickets, všetky event stavy, raffle bundle + migrácia Designer |
 | `feature/greenfield-purchase-api` | Zlúčené do `main` |
 | `feature/return-disabled-events` | Zlúčené (predkom greenfield) |
 | `feature/event-raffle-bundle` | Zlúčené do `main` |
@@ -58,7 +58,7 @@ Skontroluj checklist a odškrtni, keď je hotové:
 - [x] Commitnúť `feature/event-raffle-bundle` (migrácia `20260520120000_EventRaffleBundle`, validator, API, hosted service)
 - [x] Merge do `main` (`feature/event-raffle-bundle` obsahuje greenfield + disabled events)
 - [ ] Vetva `integrate/upstream-2026-06`: `git fetch upstream` + merge `upstream/main` (autor ~**1.3.61**), vyriešiť konflikty v owned súboroch
-- [x] Verzia fork **1.3.6.0** v `.csproj`
+- [x] Verzia fork **1.3.6.2** v `.csproj`
 - [x] Aktualizovať `CHANGELOG-FORK.md`
 - [ ] Build `.btcpay` z `main`, nasadiť na BTCPay, otestovať Satflux + WordPress offline
 - [ ] V [satflux/docs/SATOSHI_TICKETS.md](../../../satflux/docs/SATOSHI_TICKETS.md) doplniť **min. verziu** pluginu
@@ -124,6 +124,28 @@ git tag satoshi-tickets-vX.Y.Z-webium   # podľa vášho semver
 - Fork verzia **≥** upstream po merge (aby bolo jasné, že build obsahuje autorove opravy + naše featury).
 - Voliteľne v `.csproj`: `<Product>Satoshi Tickets (Webium)</Product>` — v BTCPay UI rozlišiteľné od upstream.
 - **Nepoužívať** upstream číslo verzie bez kontroly — autor môže mať iné API (napr. bez offline endpointov).
+
+---
+
+## Hotfix: `column BundledRaffleId does not exist`
+
+Ak log ukazuje `42703: column e.BundledRaffleId does not exist`, plugin sa **vypne** a API vracia 404/502.
+
+**Príčina:** nový kód (1.3.6+) bez EF migrácie `20260520120000_EventRaffleBundle` v DB (často chýbal súbor `*.Designer.cs`).
+
+**Rýchly SQL fix** (PostgreSQL, potom re-enable plugin v BTCPay):
+
+```sql
+ALTER TABLE "BTCPayServer.Plugins.SatoshiTickets"."Events"
+  ADD COLUMN IF NOT EXISTS "BundledRaffleId" uuid NULL,
+  ADD COLUMN IF NOT EXISTS "BundledRaffleTicketsPerAdmission" integer NOT NULL DEFAULT 0;
+
+INSERT INTO "BTCPayServer.Plugins.SatoshiTickets"."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+VALUES ('20260520120000_EventRaffleBundle', '8.0.11')
+ON CONFLICT ("MigrationId") DO NOTHING;
+```
+
+**Trvalé:** nasaď build **≥ 1.3.6.2** (s `EventRaffleBundle.Designer.cs`), reštart BTCPay, v logu očakávaj `Satoshi Tickets: applying ... EventRaffleBundle`.
 
 ---
 

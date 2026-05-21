@@ -14,6 +14,15 @@ Postup pri každom release: [FORK_MAINTENANCE.md](./FORK_MAINTENANCE.md).
 
 ---
 
+## [1.3.6.2] — 2026-05-21
+
+### Fixed
+- Pridaný chýbajúci EF migrácia `20260520120000_EventRaffleBundle.Designer.cs` — `MigrateAsync` teraz aplikuje stĺpce `BundledRaffleId` / `BundledRaffleTicketsPerAdmission` (oprava `column BundledRaffleId does not exist`).
+- `PluginMigrationRunner` loguje pending migrácie pred/po `MigrateAsync`.
+- Jasnejšia chybová správa pri bundle bez nainštalovaného BTCPay Raffle.
+
+---
+
 ## [1.3.6.1] — 2026-05-21
 
 ### Fixed
