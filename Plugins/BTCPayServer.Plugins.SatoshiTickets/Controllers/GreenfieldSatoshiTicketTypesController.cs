@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using BTCPayServer.Abstractions.Constants;
@@ -6,6 +7,7 @@ using BTCPayServer.Client;
 using BTCPayServer.Plugins.SatoshiTickets.Data;
 using BTCPayServer.Plugins.SatoshiTickets.Models.Api;
 using BTCPayServer.Plugins.SatoshiTickets.Services;
+using BTCPayServer.Plugins.SatoshiTickets.Services.Integration;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
@@ -23,10 +25,14 @@ namespace BTCPayServer.Plugins.SatoshiTickets.Controllers;
 public class GreenfieldSatoshiTicketTypesController : ControllerBase
 {
     private readonly SimpleTicketSalesDbContextFactory _dbContextFactory;
+    private readonly IRaffleEventBundleClient? _raffleBundle;
 
-    public GreenfieldSatoshiTicketTypesController(SimpleTicketSalesDbContextFactory dbContextFactory)
+    public GreenfieldSatoshiTicketTypesController(
+        SimpleTicketSalesDbContextFactory dbContextFactory,
+        RaffleEventBundleClientProvider raffleBundleProvider)
     {
         _dbContextFactory = dbContextFactory;
+        _raffleBundle = raffleBundleProvider.Client;
     }
 
     private string CurrentStoreId => HttpContext.GetStoreData()?.Id;
@@ -99,6 +105,9 @@ public class GreenfieldSatoshiTicketTypesController : ControllerBase
                     "Quantity specified is higher than available event capacity");
         }
 
+        await EventRaffleBundleRequestValidator.ApplyBundleFieldsAsync(
+            ModelState, CurrentStoreId, request.BundledRaffleTicketsPerAdmission, request.BundledRaffleId, _raffleBundle);
+
         if (!ModelState.IsValid)
             return this.CreateValidationError(ModelState);
 
@@ -112,6 +121,7 @@ public class GreenfieldSatoshiTicketTypesController : ControllerBase
             IsDefault = request.IsDefault,
             TicketTypeState = EntityState.Active
         };
+        ApplyBundleFields(entity, request.BundledRaffleTicketsPerAdmission, request.BundledRaffleId);
         var currentDefault = ctx.TicketTypes.FirstOrDefault(c => c.EventId == eventId && c.IsDefault);
         if (currentDefault == null)
         {
@@ -166,6 +176,17 @@ public class GreenfieldSatoshiTicketTypesController : ControllerBase
                     "Quantity specified is higher than available event capacity");
         }
 
+        var bundlePerAdmission = request.BundledRaffleTicketsPerAdmission ?? entity.BundledRaffleTicketsPerAdmission;
+        var bundleRaffleId = request.BundledRaffleId ?? entity.BundledRaffleId;
+        if (request.BundledRaffleTicketsPerAdmission is 0)
+        {
+            bundlePerAdmission = 0;
+            bundleRaffleId = null;
+        }
+
+        await EventRaffleBundleRequestValidator.ApplyBundleFieldsAsync(
+            ModelState, CurrentStoreId, bundlePerAdmission, bundleRaffleId, _raffleBundle);
+
         if (!ModelState.IsValid)
             return this.CreateValidationError(ModelState);
 
@@ -188,6 +209,10 @@ public class GreenfieldSatoshiTicketTypesController : ControllerBase
             var anyDefault = ctx.TicketTypes.Any(t => t.EventId == eventId && t.Id != ticketTypeId && t.IsDefault);
             entity.IsDefault = !anyDefault;
         }
+
+        if (request.BundledRaffleTicketsPerAdmission.HasValue || request.BundledRaffleId.HasValue)
+            ApplyBundleFields(entity, bundlePerAdmission, bundleRaffleId);
+
         await ctx.SaveChangesAsync();
         return Ok(ToTicketTypeData(entity));
     }
@@ -251,8 +276,16 @@ public class GreenfieldSatoshiTicketTypesController : ControllerBase
             QuantitySold = entity.QuantitySold,
             QuantityAvailable = entity.Quantity - entity.QuantitySold,
             IsDefault = entity.IsDefault,
-            TicketTypeState = entity.TicketTypeState.ToString()
+            TicketTypeState = entity.TicketTypeState.ToString(),
+            BundledRaffleId = entity.BundledRaffleId,
+            BundledRaffleTicketsPerAdmission = entity.BundledRaffleTicketsPerAdmission
         };
+    }
+
+    private static void ApplyBundleFields(TicketType entity, int perAdmission, Guid? raffleId)
+    {
+        entity.BundledRaffleTicketsPerAdmission = Math.Max(0, perAdmission);
+        entity.BundledRaffleId = entity.BundledRaffleTicketsPerAdmission > 0 ? raffleId : null;
     }
 
     private IActionResult EventNotFound()

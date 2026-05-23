@@ -28,7 +28,7 @@ Tieto súbory / endpointy **neprepisovať slepo** pri `git merge upstream/main`:
 | Offline / manuálne vstupenky | `POST .../satoshi-tickets/events/{eventId}/create-tickets-offline` v `Controllers/GreenfieldSatoshiTicketsController.cs` | WordPress plugin |
 | Greenfield purchase | `CreatePurchase` v tom istom controlleri | WordPress / integrácie |
 | Všetky stavy eventov v API | `Controllers/GreenfieldSatoshiTicketsEventsController.cs` — bez `EventState == Active` v `GetEvents`/`GetEvent` | Satflux (posiela `includeInactive` + `include_inactive`; plugin vracia všetky stavy) |
-| Event raffle bundle | `Event.BundledRaffleId`, `BundledRaffleTicketsPerAdmission`, `Services/SimpleTicketSalesHostedService.cs`, `Services/EventRaffleBundleRequestValidator.cs` | Satflux + **BTCPay Raffle** plugin |
+| Ticket type raffle bundle | `TicketType.BundledRaffleId`, `BundledRaffleTicketsPerAdmission`, `Controllers/GreenfieldSatoshiTicketTypesController.cs`, `Services/SimpleTicketSalesHostedService.cs`, migrácia `20260521120000_TicketTypeRaffleBundle` | Satflux + **BTCPay Raffle** plugin |
 
 Zmeny v tomto zozname zapisuj do `CHANGELOG-FORK.md` (sekcia príslušnej verzie).
 

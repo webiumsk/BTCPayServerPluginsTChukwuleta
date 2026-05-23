@@ -26,8 +26,4 @@ public class Event
     public bool ReminderEnabled { get; set; }
     public int? ReminderDaysBeforeEvent { get; set; }
     public DateTimeOffset? ReminderSentAt { get; set; }
-    /// <summary>BTCPay Raffle id when admission tickets include raffle entries.</summary>
-    public Guid? BundledRaffleId { get; set; }
-    /// <summary>Raffle tickets granted per one admission ticket (same buyer email).</summary>
-    public int BundledRaffleTicketsPerAdmission { get; set; }
 }

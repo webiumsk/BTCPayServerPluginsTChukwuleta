@@ -1298,6 +1298,17 @@
             "type": "boolean",
             "default": false,
             "description": "Whether this is the pre-selected default tier. First created type is always default."
+          },
+          "bundledRaffleId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Open BTCPay Raffle id whose tickets are included with each ticket of this type."
+          },
+          "bundledRaffleTicketsPerAdmission": {
+            "type": "integer",
+            "default": 0,
+            "description": "Number of raffle tickets granted per one ticket of this type (0 = none). Max 20."
           }
         }
       },
@@ -1326,6 +1337,17 @@
           "isDefault": {
             "type": "boolean",
             "description": "Whether this is the default tier."
+          },
+          "bundledRaffleId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Open BTCPay Raffle id whose tickets are included with each ticket of this type."
+          },
+          "bundledRaffleTicketsPerAdmission": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Number of raffle tickets per ticket of this type (0 clears bundle)."
           }
         }
       },
@@ -1375,6 +1397,16 @@
             "type": "string",
             "enum": ["Active", "Disabled"],
             "description": "Current ticket type state."
+          },
+          "bundledRaffleId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Open BTCPay Raffle id whose tickets are included with each ticket of this type."
+          },
+          "bundledRaffleTicketsPerAdmission": {
+            "type": "integer",
+            "description": "Number of raffle tickets granted per one ticket of this type (0 = none)."
           }
         }
       },

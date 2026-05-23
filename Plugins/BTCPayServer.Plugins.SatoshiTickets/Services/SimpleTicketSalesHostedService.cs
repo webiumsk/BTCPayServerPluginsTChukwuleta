@@ -198,53 +198,70 @@ public class SimpleTicketSalesHostedService : EventHostedServiceBase, IPeriodicT
                 catch { result.Write($"Failed to send email for Order Id: {order.Id}.", InvoiceEventData.EventSeverity.Error); }
             }
 
-            if (_raffleBundle != null && ticketEvent?.BundledRaffleId is Guid raffleId
-                && ticketEvent.BundledRaffleTicketsPerAdmission > 0)
+            if (_raffleBundle != null)
             {
                 var baseUrl = invoice.ServerUrl ?? "";
-                var perAdmission = ticketEvent.BundledRaffleTicketsPerAdmission;
-                var byEmail = order.Tickets
+                var ticketTypesById = ctx.TicketTypes
+                    .Where(c => c.EventId == order.EventId)
+                    .ToDictionary(t => t.Id);
+                var allocations = order.Tickets
                     .Where(t => !string.IsNullOrWhiteSpace(t.Email))
-                    .GroupBy(t => NormalizeBuyerEmail(t.Email))
-                    .Where(g => !string.IsNullOrEmpty(g.Key));
+                    .GroupBy(t => (Email: NormalizeBuyerEmail(t.Email)!, t.TicketTypeId))
+                    .Select(g =>
+                    {
+                        if (!ticketTypesById.TryGetValue(g.Key.TicketTypeId, out var tt))
+                            return null;
+                        if (tt.BundledRaffleTicketsPerAdmission <= 0 || tt.BundledRaffleId is not Guid raffleId)
+                            return null;
+                        return new
+                        {
+                            g.Key.Email,
+                            RaffleId = raffleId,
+                            Count = g.Count() * tt.BundledRaffleTicketsPerAdmission,
+                            BuyerName = BuildBuyerName(g.First())
+                        };
+                    })
+                    .Where(x => x != null)
+                    .GroupBy(x => (x!.Email, x.RaffleId))
+                    .Select(g => new
+                    {
+                        g.Key.Email,
+                        g.Key.RaffleId,
+                        Total = g.Sum(x => x!.Count),
+                        BuyerName = g.Select(x => x!.BuyerName).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n))
+                    });
 
-                foreach (var group in byEmail)
+                foreach (var alloc in allocations)
                 {
-                    var ticketCount = group.Count();
-                    var totalRaffle = ticketCount * perAdmission;
-                    var first = group.First();
-                    var buyerName = $"{first.FirstName} {first.LastName}".Trim();
-                    if (string.IsNullOrWhiteSpace(buyerName))
-                        buyerName = null;
-
                     try
                     {
-                        var alloc = await _raffleBundle.AllocateForEventOrderAsync(
+                        var eventOrderId = $"{order.Id}:{alloc.RaffleId:N}";
+                        var bundleResult = await _raffleBundle.AllocateForEventOrderAsync(
                             invoice.StoreId,
-                            raffleId,
-                            totalRaffle,
-                            group.Key,
-                            buyerName,
-                            order.Id,
+                            alloc.RaffleId,
+                            alloc.Total,
+                            alloc.Email,
+                            alloc.BuyerName,
+                            eventOrderId,
                             baseUrl);
 
-                        if (!alloc.Success)
+                        if (!bundleResult.Success)
                         {
                             result.Write(
-                                $"Raffle bundle failed for {group.Key}: {alloc.Error}",
+                                $"Raffle bundle failed for {alloc.Email}: {bundleResult.Error}",
                                 InvoiceEventData.EventSeverity.Error);
                         }
-                        else if (alloc.TicketsAllocated > 0)
+                        else if (bundleResult.TicketsAllocated > 0)
                         {
                             result.Write(
-                                $"Allocated {alloc.TicketsAllocated} raffle ticket(s) for {group.Key}",
+                                $"Allocated {bundleResult.TicketsAllocated} raffle ticket(s) for {alloc.Email}",
                                 InvoiceEventData.EventSeverity.Success);
                         }
                     }
                     catch (Exception ex)
                     {
                         result.Write(
-                            $"Raffle bundle failed for {group.Key}: {ex.Message}",
+                            $"Raffle bundle failed for {alloc.Email}: {ex.Message}",
                             InvoiceEventData.EventSeverity.Error);
                     }
                 }
@@ -260,6 +277,12 @@ public class SimpleTicketSalesHostedService : EventHostedServiceBase, IPeriodicT
         if (string.IsNullOrWhiteSpace(email))
             return null;
         return email.Trim().ToLowerInvariant();
+    }
+
+    private static string BuildBuyerName(Ticket ticket)
+    {
+        var buyerName = $"{ticket.FirstName} {ticket.LastName}".Trim();
+        return string.IsNullOrWhiteSpace(buyerName) ? null : buyerName;
     }
 }
 

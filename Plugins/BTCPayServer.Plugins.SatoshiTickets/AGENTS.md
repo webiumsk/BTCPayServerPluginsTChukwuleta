@@ -28,7 +28,7 @@ Pred každou väčšou zmenou si prečítaj:
 | Offline / manuálne vstupenky | `Controllers/GreenfieldSatoshiTicketsController.cs` — `create-tickets-offline` |
 | Greenfield purchase | ten istý controller — `CreatePurchase` |
 | Všetky stavy eventov v API | `Controllers/GreenfieldSatoshiTicketsEventsController.cs` — `GET /events` bez filtra Active; Satflux query `includeInactive` / `include_inactive` je kompatibilný, parameter sa nevyžaduje |
-| Event raffle bundle | `Data/Entities/Event.cs`, `Services/SimpleTicketSalesHostedService.cs`, `Services/EventRaffleBundleRequestValidator.cs`, `Services/Integration/RaffleEventBundleClientResolver.cs` (voliteľný runtime bridge — **žiadny** compile-time ref na Raffle) |
+| Ticket type raffle bundle | `Data/Entities/TicketType.cs`, `Controllers/GreenfieldSatoshiTicketTypesController.cs`, `Services/SimpleTicketSalesHostedService.cs`, `Services/EventRaffleBundleRequestValidator.cs`, migrácia `20260521120000_TicketTypeRaffleBundle`, `Services/Integration/RaffleEventBundleClientResolver.cs` (voliteľný runtime bridge — **žiadny** compile-time ref na Raffle) |
 
 Po zmene fork featury aktualizuj `CHANGELOG-FORK.md` a bump `<Version>` v `BTCPayServer.Plugins.SatoshiTickets.csproj`.
 

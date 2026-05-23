@@ -14,6 +14,17 @@ Postup pri každom release: [FORK_MAINTENANCE.md](./FORK_MAINTENANCE.md).
 
 ---
 
+## [1.3.7.0] — 2026-05-21
+
+### Changed (breaking)
+- **Raffle bundle per ticket type** — `bundledRaffleId` a `bundledRaffleTicketsPerAdmission` presunuté z Event API na Ticket Type API (`POST/PUT .../ticket-types`). Migrácia skopíruje existujúce event bundle na všetky ticket types daného eventu.
+- Alokácia tombolov po `InvoiceSettled` podľa ticket type; viac tombol na objednávku cez composite `eventOrderId` (`{orderId}:{raffleId}`).
+
+### Requires
+- Satflux s podporou bundle na ticket type (vetva `feature/ticket-type-raffle-bundle`).
+
+---
+
 ## [1.3.6.4] — 2026-05-21
 
 ### Fixed
