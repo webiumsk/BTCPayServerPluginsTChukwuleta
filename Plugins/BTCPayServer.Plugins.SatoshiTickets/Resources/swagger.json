@@ -432,7 +432,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateTicketTypeRequest"
+                "$ref": "#/components/schemas/TicketTypeRequest"
               }
             }
           }
@@ -514,7 +514,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateTicketTypeRequest"
+                "$ref": "#/components/schemas/TicketTypeRequest"
               }
             }
           }
@@ -1217,7 +1217,7 @@
           }
         }
       },
-      "CreateTicketTypeRequest": {
+      "TicketTypeRequest": {
         "type": "object",
         "required": ["name", "price"],
         "properties": {
@@ -1254,47 +1254,8 @@
           },
           "bundledRaffleTicketsPerAdmission": {
             "type": "integer",
-            "default": 0,
-            "description": "Number of raffle tickets granted per one ticket of this type (0 = none). Max 20."
-          }
-        }
-      },
-      "UpdateTicketTypeRequest": {
-        "type": "object",
-        "required": ["name", "price"],
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "Ticket type name."
-          },
-          "price": {
-            "type": "number",
-            "format": "decimal",
-            "description": "Price per ticket. Must be > 0."
-          },
-          "description": {
-            "type": "string",
             "nullable": true,
-            "description": "Description of what this tier includes."
-          },
-          "quantity": {
-            "type": "integer",
-            "description": "Number of tickets available."
-          },
-          "isDefault": {
-            "type": "boolean",
-            "description": "Whether this is the default tier."
-          },
-          "bundledRaffleId": {
-            "type": "string",
-            "format": "uuid",
-            "nullable": true,
-            "description": "Open BTCPay Raffle id whose tickets are included with each ticket of this type."
-          },
-          "bundledRaffleTicketsPerAdmission": {
-            "type": "integer",
-            "nullable": true,
-            "description": "Number of raffle tickets per ticket of this type (0 clears bundle)."
+            "description": "Number of raffle tickets granted per one ticket of this type (0 = none, clears bundle on update). Max 20."
           }
         }
       },
