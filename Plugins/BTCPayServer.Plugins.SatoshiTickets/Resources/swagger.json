@@ -40,7 +40,7 @@
     },
     {
       "name": "Tickets",
-      "description": "List sold tickets, export CSV, and check-in attendees"
+      "description": "List sold tickets"
     },
     {
       "name": "Orders",
@@ -1075,26 +1075,6 @@
             "type": "string",
             "nullable": true,
             "description": "Email body template. Same placeholders as `emailSubject`."
-          },
-          "hasMaximumCapacity": {
-            "type": "boolean",
-            "default": false,
-            "description": "Whether the event has a total ticket cap."
-          },
-          "maximumEventCapacity": {
-            "type": "integer",
-            "nullable": true,
-            "description": "Total ticket cap. Required and must be > 0 when `hasMaximumCapacity` is `true`."
-          },
-          "eventLogoFileId": {
-            "type": "string",
-            "nullable": true,
-            "description": "File ID of a previously uploaded image. Prefer using the dedicated logo upload endpoint instead."
-          },
-          "enable": {
-            "type": "boolean",
-            "default": false,
-            "description": "If `true`, activates the event immediately upon creation."
           }
         }
       },
@@ -1151,20 +1131,6 @@
             "type": "string",
             "nullable": true,
             "description": "Email body template."
-          },
-          "hasMaximumCapacity": {
-            "type": "boolean",
-            "description": "Whether the event has a total ticket cap."
-          },
-          "maximumEventCapacity": {
-            "type": "integer",
-            "nullable": true,
-            "description": "Total ticket cap."
-          },
-          "eventLogoFileId": {
-            "type": "string",
-            "nullable": true,
-            "description": "File ID of a previously uploaded image. Send empty string to remove logo, `null` to leave unchanged."
           }
         }
       },
@@ -1230,29 +1196,10 @@
             "nullable": true,
             "description": "Email body template."
           },
-          "hasMaximumCapacity": {
-            "type": "boolean",
-            "description": "Whether the event has a ticket cap."
-          },
-          "maximumEventCapacity": {
-            "type": "integer",
-            "nullable": true,
-            "description": "Total ticket cap."
-          },
           "eventState": {
             "type": "string",
             "enum": ["Active", "Disabled"],
             "description": "Current event state."
-          },
-          "eventLogoFileId": {
-            "type": "string",
-            "nullable": true,
-            "description": "File ID of the event logo."
-          },
-          "eventLogoUrl": {
-            "type": "string",
-            "nullable": true,
-            "description": "Fully resolved public URL of the event logo image."
           },
           "purchaseLink": {
             "type": "string",

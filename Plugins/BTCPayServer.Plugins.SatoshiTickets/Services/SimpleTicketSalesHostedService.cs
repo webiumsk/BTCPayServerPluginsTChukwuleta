@@ -22,13 +22,11 @@ public class SimpleTicketSalesHostedService : EventHostedServiceBase, IPeriodicT
     public const string TICKET_SALES_PREFIX = "Ticket_Sales_";
     private readonly EmailService _emailService;
     private readonly InvoiceRepository _invoiceRepository;
-    private readonly EmailSenderFactory _emailSenderFactory;
     private readonly SimpleTicketSalesDbContextFactory _dbContextFactory;
     private readonly IRaffleEventBundleClient? _raffleBundle;
 
     public SimpleTicketSalesHostedService(EmailService emailService,
         EventAggregator eventAggregator,
-        EmailSenderFactory emailSenderFactory,
         InvoiceRepository invoiceRepository,
         SimpleTicketSalesDbContextFactory dbContextFactory, Logs logs,
         RaffleEventBundleClientProvider raffleBundleProvider) : base(eventAggregator, logs)
@@ -36,7 +34,6 @@ public class SimpleTicketSalesHostedService : EventHostedServiceBase, IPeriodicT
         _emailService = emailService;
         _dbContextFactory = dbContextFactory;
         _invoiceRepository = invoiceRepository;
-        _emailSenderFactory = emailSenderFactory;
         _raffleBundle = raffleBundleProvider.Client;
     }
 

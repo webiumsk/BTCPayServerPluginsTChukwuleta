@@ -22,28 +22,18 @@ namespace BTCPayServer.Plugins.SatoshiTickets.Controllers;
 [ApiController]
 [Authorize(AuthenticationSchemes = AuthenticationSchemes.Greenfield, Policy = Policies.CanModifyStoreSettings)]
 [EnableCors(CorsPolicies.All)]
-public class GreenfieldSatoshiTicketTypesController : ControllerBase
+public class GreenfieldSatoshiTicketTypesController(
+    SimpleTicketSalesDbContextFactory dbContextFactory,
+    RaffleEventBundleClientProvider raffleBundleProvider) : ControllerBase
 {
-    private readonly SimpleTicketSalesDbContextFactory _dbContextFactory;
-    private readonly IRaffleEventBundleClient? _raffleBundle;
-
-    public GreenfieldSatoshiTicketTypesController(
-        SimpleTicketSalesDbContextFactory dbContextFactory,
-        RaffleEventBundleClientProvider raffleBundleProvider)
-    {
-        _dbContextFactory = dbContextFactory;
-        _raffleBundle = raffleBundleProvider.Client;
-    }
-
-    private string CurrentStoreId => HttpContext.GetStoreData()?.Id;
+    private IRaffleEventBundleClient? RaffleBundle => raffleBundleProvider.Client;
 
     [HttpGet("events/{eventId}/ticket-types")]
-    public async Task<IActionResult> GetTicketTypes(string storeId, string eventId,
-        [FromQuery] string sortBy = "Name", [FromQuery] string sortDir = "asc")
+    public async Task<IActionResult> GetTicketTypes(string storeId, string eventId, [FromQuery] string sortBy = "Name", [FromQuery] string sortDir = "asc")
     {
-        await using var ctx = _dbContextFactory.CreateContext();
+        await using var ctx = dbContextFactory.CreateContext();
 
-        var ticketEvent = ctx.Events.Any(c => c.StoreId == CurrentStoreId && c.Id == eventId);
+        var ticketEvent = ctx.Events.Any(c => c.StoreId == storeId && c.Id == eventId);
         if (!ticketEvent)
             return EventNotFound();
 
@@ -62,8 +52,8 @@ public class GreenfieldSatoshiTicketTypesController : ControllerBase
     [HttpGet("events/{eventId}/ticket-types/{ticketTypeId}")]
     public async Task<IActionResult> GetTicketType(string storeId, string eventId, string ticketTypeId)
     {
-        await using var ctx = _dbContextFactory.CreateContext();
-        var ticketEvent = ctx.Events.Any(c => c.StoreId == CurrentStoreId && c.Id == eventId);
+        await using var ctx = dbContextFactory.CreateContext();
+        var ticketEvent = ctx.Events.Any(c => c.StoreId == storeId && c.Id == eventId);
         if (!ticketEvent)
             return EventNotFound();
 
@@ -75,7 +65,7 @@ public class GreenfieldSatoshiTicketTypesController : ControllerBase
     }
 
     [HttpPost("events/{eventId}/ticket-types")]
-    public async Task<IActionResult> CreateTicketType(string storeId, string eventId, [FromBody] CreateTicketTypeRequest request)
+    public async Task<IActionResult> CreateTicketType(string storeId, string eventId, [FromBody] TicketTypeRequest request)
     {
         if (request == null)
         {
@@ -83,8 +73,8 @@ public class GreenfieldSatoshiTicketTypesController : ControllerBase
             return this.CreateValidationError(ModelState);
         }
 
-        await using var ctx = _dbContextFactory.CreateContext();
-        var ticketEvent = ctx.Events.FirstOrDefault(c => c.Id == eventId && c.StoreId == CurrentStoreId);
+        await using var ctx = dbContextFactory.CreateContext();
+        var ticketEvent = ctx.Events.FirstOrDefault(c => c.Id == eventId && c.StoreId == storeId);
         if (ticketEvent == null)
             return EventNotFound();
 
@@ -101,12 +91,11 @@ public class GreenfieldSatoshiTicketTypesController : ControllerBase
         {
             var usedQuantity = await ctx.TicketTypes.Where(t => t.EventId == eventId).SumAsync(c => c.Quantity);
             if (request.Quantity > (ticketEvent.MaximumEventCapacity - usedQuantity))
-                ModelState.AddModelError(nameof(request.Quantity),
-                    "Quantity specified is higher than available event capacity");
+                ModelState.AddModelError(nameof(request.Quantity), "Quantity specified is higher than available event capacity");
         }
 
         await EventRaffleBundleRequestValidator.ApplyBundleFieldsAsync(
-            ModelState, CurrentStoreId, request.BundledRaffleTicketsPerAdmission, request.BundledRaffleId, _raffleBundle);
+            ModelState, storeId, request.BundledRaffleTicketsPerAdmission ?? 0, request.BundledRaffleId, RaffleBundle);
 
         if (!ModelState.IsValid)
             return this.CreateValidationError(ModelState);
@@ -121,7 +110,7 @@ public class GreenfieldSatoshiTicketTypesController : ControllerBase
             IsDefault = request.IsDefault,
             TicketTypeState = EntityState.Active
         };
-        ApplyBundleFields(entity, request.BundledRaffleTicketsPerAdmission, request.BundledRaffleId);
+        ApplyBundleFields(entity, request.BundledRaffleTicketsPerAdmission ?? 0, request.BundledRaffleId);
         var currentDefault = ctx.TicketTypes.FirstOrDefault(c => c.EventId == eventId && c.IsDefault);
         if (currentDefault == null)
         {
@@ -143,8 +132,7 @@ public class GreenfieldSatoshiTicketTypesController : ControllerBase
     }
 
     [HttpPut("events/{eventId}/ticket-types/{ticketTypeId}")]
-    public async Task<IActionResult> UpdateTicketType(string storeId, string eventId, string ticketTypeId,
-        [FromBody] UpdateTicketTypeRequest request)
+    public async Task<IActionResult> UpdateTicketType(string storeId, string eventId, string ticketTypeId, [FromBody] TicketTypeRequest request)
     {
         if (request == null)
         {
@@ -152,8 +140,8 @@ public class GreenfieldSatoshiTicketTypesController : ControllerBase
             return this.CreateValidationError(ModelState);
         }
 
-        await using var ctx = _dbContextFactory.CreateContext();
-        var ticketEvent = ctx.Events.FirstOrDefault(c => c.Id == eventId && c.StoreId == CurrentStoreId);
+        await using var ctx = dbContextFactory.CreateContext();
+        var ticketEvent = ctx.Events.FirstOrDefault(c => c.Id == eventId && c.StoreId == storeId);
         if (ticketEvent == null)
             return EventNotFound();
 
@@ -163,17 +151,19 @@ public class GreenfieldSatoshiTicketTypesController : ControllerBase
 
         if (string.IsNullOrWhiteSpace(request.Name))
             ModelState.AddModelError(nameof(request.Name), "Name is required");
+
         if (request.Price <= 0)
             ModelState.AddModelError(nameof(request.Price), "Price cannot be zero or negative");
+
         if (request.Quantity <= 0 && ticketEvent.HasMaximumCapacity)
             ModelState.AddModelError(nameof(request.Quantity), "Quantity must be greater than zero");
+
         if (ticketEvent.HasMaximumCapacity)
         {
             var usedQuantity = ctx.TicketTypes
                 .Where(t => t.EventId == eventId && t.Id != ticketTypeId).Sum(c => c.Quantity);
             if (request.Quantity > (ticketEvent.MaximumEventCapacity - usedQuantity))
-                ModelState.AddModelError(nameof(request.Quantity),
-                    "Quantity specified is higher than available event capacity");
+                ModelState.AddModelError(nameof(request.Quantity), "Quantity specified is higher than available event capacity");
         }
 
         var bundlePerAdmission = request.BundledRaffleTicketsPerAdmission ?? entity.BundledRaffleTicketsPerAdmission;
@@ -185,7 +175,7 @@ public class GreenfieldSatoshiTicketTypesController : ControllerBase
         }
 
         await EventRaffleBundleRequestValidator.ApplyBundleFieldsAsync(
-            ModelState, CurrentStoreId, bundlePerAdmission, bundleRaffleId, _raffleBundle);
+            ModelState, storeId, bundlePerAdmission, bundleRaffleId, RaffleBundle);
 
         if (!ModelState.IsValid)
             return this.CreateValidationError(ModelState);
@@ -218,12 +208,12 @@ public class GreenfieldSatoshiTicketTypesController : ControllerBase
     }
 
 
-    [HttpDelete("ticket-types/{ticketTypeId}")]
+    [HttpDelete("events/{eventId}/ticket-types/{ticketTypeId}")]
     public async Task<IActionResult> DeleteTicketType(string storeId, string eventId, string ticketTypeId)
     {
-        await using var ctx = _dbContextFactory.CreateContext();
+        await using var ctx = dbContextFactory.CreateContext();
 
-        var ticketEvent = ctx.Events.FirstOrDefault(c => c.StoreId == CurrentStoreId && c.Id == eventId);
+        var ticketEvent = ctx.Events.FirstOrDefault(c => c.StoreId == storeId && c.Id == eventId);
         if (ticketEvent == null)
             return EventNotFound();
 
@@ -232,8 +222,6 @@ public class GreenfieldSatoshiTicketTypesController : ControllerBase
             return TicketTypeNotFound();
 
         ctx.TicketTypes.Remove(entity);
-
-        // If we're deleting the default, reassign default to another ticket type
         if (entity.IsDefault)
         {
             var newDefault = ctx.TicketTypes.Where(t => t.EventId == eventId && t.Id != ticketTypeId)
@@ -245,12 +233,12 @@ public class GreenfieldSatoshiTicketTypesController : ControllerBase
         return Ok();
     }
 
-    [HttpPut("ticket-types/{ticketTypeId}/toggle")]
+    [HttpPut("events/{eventId}/ticket-types/{ticketTypeId}/toggle")]
     public async Task<IActionResult> ToggleTicketTypeStatus(string storeId, string eventId, string ticketTypeId)
     {
-        await using var ctx = _dbContextFactory.CreateContext();
+        await using var ctx = dbContextFactory.CreateContext();
 
-        var ticketEvent = ctx.Events.FirstOrDefault(c => c.StoreId == CurrentStoreId && c.Id == eventId);
+        var ticketEvent = ctx.Events.FirstOrDefault(c => c.StoreId == storeId && c.Id == eventId);
         if (ticketEvent == null)
             return EventNotFound();
 
